@@ -1,0 +1,4093 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+<title>SIYO — Suivi des Forages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f2ec;
+    --bg-elev: #ffffff;
+    --bg-sunk: #ede8df;
+    --ink: #1a1a1a;
+    --ink-soft: #5a564f;
+    --ink-faint: #8a857c;
+    --line: #d8d2c4;
+    --line-soft: #e8e3d6;
+    --accent: #c2410c;
+    --accent-soft: #fed7aa;
+    --ok: #15803d;
+    --ok-soft: #dcfce7;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+    --err: #b91c1c;
+    --err-soft: #fee2e2;
+    --lock: #9a948a;
+    --shadow-sm: 0 1px 2px rgba(26,26,26,0.04), 0 1px 1px rgba(26,26,26,0.03);
+    --shadow-md: 0 4px 12px rgba(26,26,26,0.06), 0 2px 4px rgba(26,26,26,0.04);
+    --shadow-lg: 0 16px 48px rgba(26,26,26,0.12), 0 4px 12px rgba(26,26,26,0.08);
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(26,26,26,0.04) 1px, transparent 0);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 40px 80px;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 32px;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .brand h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .brand h1 .italic {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+
+  .brand .subtitle {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-faint);
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .sync-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+  }
+
+  .sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--lock);
+  }
+
+  .sync-dot.ok { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+  .sync-dot.syncing { background: var(--warn); animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--err); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ─── TABS ─── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tab {
+    background: none;
+    border: none;
+    padding: 14px 24px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+
+  .tab:hover { color: var(--ink); }
+
+  .tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab .count {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: var(--bg-sunk);
+    border-radius: 99px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+
+  .tab.active .count {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* ─── TOOLBAR ─── */
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .search {
+    flex: 1;
+    min-width: 220px;
+    position: relative;
+  }
+
+  .search input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    background: var(--bg-elev);
+    color: var(--ink);
+    transition: border-color 0.15s;
+  }
+
+  .search input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .search::before {
+    content: '⌕';
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-faint);
+    font-size: 16px;
+  }
+
+  .filter-select {
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-elev);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-elev);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn:hover { background: var(--bg-sunk); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .btn-accent {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .btn-accent:hover {
+    background: #9a3412;
+    border-color: #9a3412;
+  }
+
+  .btn-danger {
+    background: var(--err-soft);
+    color: var(--err);
+    border-color: var(--err-soft);
+  }
+
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* ─── PROJECT CARDS ─── */
+  .projects {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .project {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s;
+  }
+
+  .project:hover { box-shadow: var(--shadow-md); }
+
+  .project-header {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 20px;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .project-info h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .project-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  .project-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .project-meta .label {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  .project-description {
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  .project-progress {
+    text-align: right;
+  }
+
+  .progress-stat {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .progress-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    margin-top: 2px;
+  }
+
+  .expand-toggle {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-soft);
+    transition: transform 0.2s;
+    font-size: 16px;
+  }
+
+  .project.expanded .expand-toggle { transform: rotate(90deg); }
+
+  .project-body {
+    display: none;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-sunk);
+  }
+
+  .project.expanded .project-body { display: block; }
+
+  .forages-list {
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ─── FORAGE CARDS ─── */
+  .forage {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .forage.closed {
+    opacity: 0.7;
+    background: var(--bg);
+  }
+
+  .forage-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .forage-code {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 13px;
+    padding: 4px 10px;
+    background: var(--bg-sunk);
+    border-radius: 6px;
+    border: 1px solid var(--line-soft);
+  }
+
+  .forage-gps {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+
+  .forage-localite {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-style: italic;
+    color: var(--ink);
+    font-size: 14px;
+  }
+
+  .forage-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-pill {
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .status-active {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+
+  .status-closed {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+
+  .status-abandoned {
+    background: var(--err-soft);
+    color: var(--err);
+  }
+
+  .status-abandoning {
+    background: var(--warn-soft);
+    color: var(--warn);
+    animation: pulse 1.5s infinite;
+  }
+
+  /* ─── ABANDON BANNER ─── */
+  .abandon-banner {
+    margin: 16px 0;
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: var(--err-soft);
+    border: 1px solid #fca5a5;
+    color: var(--err);
+    font-size: 13px;
+  }
+
+  .abandon-banner.abandon-pending {
+    background: var(--warn-soft);
+    border-color: #fcd34d;
+    color: var(--warn);
+  }
+
+  .abandon-banner-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .abandon-banner-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  .abandon-banner-content .label {
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+
+  .abandon-info {
+    padding: 12px 14px;
+    background: var(--warn-soft);
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    color: var(--warn);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .abandon-info strong { color: var(--ink); }
+
+  /* ─── FORAGE STATES ─── */
+  .forage.abandoned {
+    background: linear-gradient(to right, rgba(254, 226, 226, 0.3) 0%, var(--bg) 8%);
+  }
+
+  .forage.abandoning {
+    border-color: #fcd34d;
+  }
+
+  /* ─── BTN WARN ─── */
+  .btn-warn {
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-color: #fcd34d;
+  }
+
+  .btn-warn:hover {
+    background: #fcd34d;
+    color: var(--ink);
+  }
+
+  /* ─── STEPS TIMELINE ─── */
+  .steps-timeline {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .step-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: var(--bg);
+    transition: all 0.2s;
+  }
+
+  .step-dot.done {
+    background: var(--ok);
+    border-color: var(--ok);
+  }
+
+  .step-dot.available {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .step-dot.locked {
+    background: var(--bg-sunk);
+    border-color: var(--line);
+    opacity: 0.5;
+  }
+
+  /* ─── STEPS DETAIL ─── */
+  .forage-body {
+    display: none;
+    padding: 20px 24px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg);
+  }
+
+  .forage.expanded .forage-body { display: block; }
+
+  .steps-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .step {
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    background: var(--bg-elev);
+    overflow: hidden;
+    transition: all 0.15s;
+  }
+
+  .step.locked {
+    opacity: 0.5;
+    background: var(--bg-sunk);
+  }
+
+  .step.done {
+    border-color: var(--ok-soft);
+    background: linear-gradient(to right, var(--ok-soft) 0%, var(--bg-elev) 80px);
+  }
+
+  .step-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .step.locked .step-header { cursor: not-allowed; }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bg-sunk);
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+
+  .step.done .step-num {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: white;
+  }
+
+  .step.locked .step-num {
+    color: var(--lock);
+  }
+
+  .step-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .step.done .step-title {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-faint);
+    color: var(--ink-soft);
+  }
+
+  .step-date {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .step-check {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border: 2px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    font-weight: 700;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .step.done .step-check {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: white;
+  }
+
+  .step.locked .step-check { cursor: not-allowed; }
+
+  .step-form {
+    display: none;
+    padding: 0 18px 18px 60px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 16px;
+  }
+
+  .step.expanded .step-form { display: block; }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+
+  .form-field label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  .form-field input,
+  .form-field textarea {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--ink);
+    transition: border-color 0.15s;
+  }
+
+  .form-field input:focus,
+  .form-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .form-field textarea {
+    resize: vertical;
+    min-height: 60px;
+    font-family: var(--font-body);
+  }
+
+  .form-field.readonly input {
+    background: var(--bg-sunk);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
+  .form-field .hint {
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+
+  .form-field .alert {
+    font-size: 11px;
+    color: var(--err);
+    font-weight: 600;
+  }
+
+  .required-mark {
+    color: var(--accent);
+    font-weight: 700;
+    margin-left: 2px;
+  }
+
+  .edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--ink-faint);
+    cursor: pointer;
+    font-size: 13px;
+    vertical-align: middle;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .edit-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  h2 .edit-btn {
+    font-size: 14px;
+    margin-left: 8px;
+  }
+
+  .form-field.full-width { grid-column: 1 / -1; }
+
+  .step-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  /* ─── CLOSE BUTTON ─── */
+  .forage-close-zone {
+    padding: 18px 24px;
+    background: var(--bg-sunk);
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .forage-close-zone .info {
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* ─── EMPTY STATE ─── */
+  .empty {
+    padding: 80px 40px;
+    text-align: center;
+    color: var(--ink-soft);
+  }
+
+  .empty h3 {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+
+  .empty p { font-size: 13px; margin-bottom: 24px; }
+
+  /* ─── MODAL ─── */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,26,0.4);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(2px);
+  }
+
+  .modal-backdrop.open { display: flex; }
+
+  .modal {
+    background: var(--bg-elev);
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .modal h2 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+
+  .modal .sub {
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  .modal-form { display: flex; flex-direction: column; gap: 14px; }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  /* ─── TOAST ─── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 14px 20px;
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 200;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.2s;
+    pointer-events: none;
+    max-width: 360px;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .toast.error { background: var(--err); }
+  .toast.success { background: var(--ok); }
+
+  /* ─── SETTINGS BANNER ─── */
+  .settings-banner {
+    background: var(--warn-soft);
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--warn);
+  }
+
+  .settings-banner strong { font-weight: 600; }
+  .settings-banner button { margin-left: auto; }
+
+  /* ─── ARCHIVE VIEW ─── */
+  .archive-project {
+    opacity: 0.85;
+  }
+
+  .archive-project .project-header {
+    cursor: default;
+  }
+
+  /* ─── DRILL-DOWN : TUILES ─── */
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .tile {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+  }
+
+  .tile:hover, .tile:active {
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .tile-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.2;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tile-sub {
+    font-size: 12px;
+    color: var(--ink-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tile-sub .label {
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin-right: 4px;
+  }
+
+  .tile-footer {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .tile .progress-track {
+    border-radius: 3px;
+    margin-top: 4px;
+  }
+
+  .tile-pct {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .tile-badge-dormant {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--err-soft);
+    color: var(--err);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .tile-add {
+    border: 2px dashed var(--line);
+    background: transparent;
+    box-shadow: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-faint);
+    font-size: 14px;
+    font-weight: 500;
+    min-height: 110px;
+  }
+
+  .tile-add:hover { color: var(--accent); border-color: var(--accent); transform: none; }
+
+  /* ─── DRILL-DOWN : NAVIGATION ─── */
+  .screen-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-elev);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .back-btn:hover { background: var(--bg-sunk); }
+
+  .breadcrumb {
+    font-size: 13px;
+    color: var(--ink-faint);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb .crumb-current {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .screen-meta {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .screen-meta .label {
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin-right: 5px;
+  }
+
+  /* ─── DASHBOARD ─── */
+  .dash-grid { display: flex; flex-direction: column; gap: 20px; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+  }
+
+  .kpi-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .kpi-card .value {
+    font-family: var(--font-mono);
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  .kpi-card .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  .kpi-card.warn .value { color: var(--err); }
+
+  .dash-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .dash-section h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .funnel-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 60px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .funnel-bar-track {
+    height: 20px;
+    background: var(--bg-sunk);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .funnel-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 5px 0 0 5px;
+    transition: width 0.4s;
+  }
+
+  .funnel-count {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .dormant-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-wrap: wrap;
+  }
+
+  .dormant-item:hover { border-color: var(--accent); background: var(--bg-sunk); }
+
+  .dormant-days {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--err);
+    min-width: 48px;
+  }
+
+  .dormant-info { flex: 1; font-size: 13px; min-width: 150px; }
+  .dormant-info .sub { font-size: 11px; color: var(--ink-faint); }
+
+  .dormant-stage {
+    font-size: 11px;
+    padding: 3px 10px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-radius: 99px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .proj-progress-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 220px) 1fr 52px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+
+  .proj-progress-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proj-progress-row .pct { font-family: var(--font-mono); font-weight: 600; text-align: right; }
+
+  .mat-summary-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+  }
+
+  .mat-summary-card {
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid var(--line-soft);
+  }
+
+  .mat-summary-card.attente { background: #eff6ff; border-color: #bfdbfe; }
+  .mat-summary-card.replier { background: var(--warn-soft); border-color: #fcd34d; }
+  .mat-summary-card .value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+  .mat-summary-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); font-weight: 600; margin-top: 4px; }
+
+  .mat-badge.attente { background: #eff6ff; color: #1d4ed8; }
+
+  @media (max-width: 768px) {
+    .tile-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tile { padding: 14px; }
+    .tile-title { font-size: 15px; }
+    .kpi-card .value { font-size: 24px; }
+    .funnel-row { grid-template-columns: 84px 1fr 52px; }
+  }
+
+  @media (max-width: 480px) {
+    .tile-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ─── BARRES DE PROGRESSION ─── */
+  .progress-track {
+    height: 5px;
+    background: var(--bg-sunk);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 0 3px 3px 0;
+    transition: width 0.4s ease;
+    min-width: 0;
+  }
+
+  .progress-fill.complete { background: var(--ok); }
+  .progress-fill.aborted { background: var(--err); }
+
+  /* ─── REGISTRE MOUVEMENTS ─── */
+  .mov-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .mov-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-sunk);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+
+  .mov-date { font-family: var(--font-mono); color: var(--ink-faint); font-size: 11px; }
+  .mov-route { color: var(--ink-soft); }
+  .mov-qty { font-weight: 600; }
+  .mov-del {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: var(--ink-faint);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .mov-del:hover { background: var(--err-soft); color: var(--err); }
+
+  .stock-neg { color: var(--err); font-weight: 700; }
+
+  /* ─── VUE MATÉRIEL ─── */
+  .material-view {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .material-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .material-header h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .material-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .material-totals {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .mat-total-card {
+    background: var(--warn-soft);
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 12px 18px;
+    min-width: 130px;
+  }
+
+  .mat-total-card .value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .mat-total-card .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--warn);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .material-table-wrap { overflow-x: auto; }
+
+  .material-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .material-table th {
+    text-align: left;
+    padding: 10px 10px;
+    background: var(--ink);
+    color: var(--bg);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  .material-table th.num, .material-table td.num {
+    text-align: right;
+    font-family: var(--font-mono);
+  }
+
+  .material-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+
+  .material-table tr.a-replier { background: rgba(254, 243, 199, 0.35); }
+  .material-table tr:hover { background: var(--bg-sunk); }
+
+  .mat-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .mat-badge.pending { background: var(--warn-soft); color: var(--warn); }
+  .mat-badge.done { background: var(--ok-soft); color: var(--ok); }
+
+  @media (max-width: 768px) {
+    .material-view { padding: 14px; }
+    .material-table { font-size: 11px; }
+    .material-table th, .material-table td { padding: 8px 6px; }
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 768px) {
+    .app { padding: 20px 16px 60px; }
+    .brand h1 { font-size: 32px; }
+    .project-header {
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+    }
+    .project-progress { grid-column: 1 / -1; text-align: left; }
+    .forage-header { flex-wrap: wrap; }
+    .forage-status { margin-left: 0; width: 100%; }
+    .step-form { padding-left: 18px; }
+    .step-header {
+      padding: 12px 14px;
+      gap: 10px;
+    }
+    .step-date {
+      font-size: 10px;
+    }
+    .step-num {
+      width: 26px;
+      height: 26px;
+    }
+    .header-actions {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .step-header {
+      padding: 10px 12px;
+      gap: 8px;
+    }
+    .step-title {
+      font-size: 13px;
+    }
+    .step-date {
+      font-size: 9px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <h1>SIYO <span class="italic">Forages</span></h1>
+      <div class="subtitle">Suivi des activités · Côte d'Ivoire</div>
+    </div>
+    <div class="header-actions">
+      <div class="sync-indicator">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncStatus">Initialisation...</span>
+      </div>
+      <button class="btn btn-sm" onclick="manualRefresh()" title="Recharger depuis Google Sheets">↻ Actualiser</button>
+      <button class="btn btn-sm" onclick="exportJSON()" title="Exporter toutes les données en JSON">⬇ Export</button>
+      <button class="btn btn-primary" onclick="openNewProject()">+ Nouveau projet</button>
+    </div>
+  </header>
+
+  <div id="configBanner" class="settings-banner" style="display:none">
+    <strong>⚠ Configuration manquante.</strong>
+    <span>L'URL Google Apps Script n'est pas configurée dans ce fichier HTML. Édite la ligne <code>const API_URL = ...</code> en haut du script.</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab" data-view="dashboard" onclick="switchView('dashboard')">
+      Tableau de bord
+    </button>
+    <button class="tab active" data-view="active" onclick="switchView('active')">
+      Projets <span class="count" id="countActive">0</span>
+    </button>
+    <button class="tab" data-view="materiel" onclick="switchView('materiel')">
+      Matériel <span class="count" id="countMateriel">0</span>
+    </button>
+    <button class="tab" data-view="archive" onclick="switchView('archive')">
+      Archives <span class="count" id="countArchive">0</span>
+    </button>
+  </div>
+
+  <div class="toolbar" id="toolbar">
+    <div class="search">
+      <input type="text" id="searchInput" placeholder="Rechercher un projet, client, localité, forage..." oninput="render()">
+    </div>
+    <select class="filter-select" id="filterClient" onchange="render()">
+      <option value="">Tous les clients</option>
+    </select>
+    <select class="filter-select" id="filterLocalite" onchange="render()">
+      <option value="">Toutes les localités</option>
+    </select>
+  </div>
+
+  <div id="projectsList" class="projects"></div>
+</div>
+
+<!-- ─── MODAL: NOUVEAU PROJET ─── -->
+<div class="modal-backdrop" id="modalNewProject">
+  <div class="modal">
+    <h2>Nouveau projet</h2>
+    <p class="sub">Crée un projet de forage. Tu pourras ajouter des forages (et leurs localités respectives) ensuite.</p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Nom du projet *</label>
+        <input type="text" id="np_name" placeholder="Ex. AEP multi-villages Sud-Comoé">
+      </div>
+      <div class="form-field">
+        <label>Description</label>
+        <textarea id="np_description" placeholder="Bref descriptif technique du projet"></textarea>
+      </div>
+      <div class="form-field">
+        <label>Client *</label>
+        <input type="text" id="np_client" placeholder="Ex. ONEP, Fondation LONACI, Mairie...">
+      </div>
+      <div class="form-field">
+        <label>Zone d'intervention (optionnel)</label>
+        <input type="text" id="np_zone" placeholder="Ex. Sud-Comoé, Région Ouest, District d'Abidjan">
+        <span class="hint">Zone géographique globale. Les localités précises se saisissent par forage.</span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalNewProject')">Annuler</button>
+      <button class="btn btn-primary" onclick="createProject()">Créer le projet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: NOUVEAU FORAGE ─── -->
+<div class="modal-backdrop" id="modalNewForage">
+  <div class="modal">
+    <h2>Nouveau forage</h2>
+    <p class="sub" id="nf_projectName"></p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Code du forage *</label>
+        <input type="text" id="nf_code" placeholder="Ex. F1, FE-01, PZ-Vridi-A">
+      </div>
+      <div class="form-field">
+        <label>Localité *</label>
+        <input type="text" id="nf_localite" placeholder="Ex. Vridi, Azaguié-Ahoua, Bouaké Nord">
+        <span class="hint">Village, quartier ou site précis du forage.</span>
+      </div>
+      <div class="form-field">
+        <label>Coordonnées GPS (optionnel)</label>
+        <input type="text" id="nf_gps" placeholder="Ex. 5.2547° N, 3.9821° W">
+        <span class="hint">Format libre. Peut être rempli plus tard.</span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalNewForage')">Annuler</button>
+      <button class="btn btn-primary" onclick="createForage()">Créer le forage</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: MODIFIER PROJET ─── -->
+<div class="modal-backdrop" id="modalEditProject">
+  <div class="modal">
+    <h2>Modifier le projet</h2>
+    <p class="sub">Corrige les informations du projet. Les données de chantier ne sont pas affectées.</p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Nom du projet *</label>
+        <input type="text" id="ep_name">
+      </div>
+      <div class="form-field">
+        <label>Description</label>
+        <textarea id="ep_description"></textarea>
+      </div>
+      <div class="form-field">
+        <label>Client *</label>
+        <input type="text" id="ep_client">
+      </div>
+      <div class="form-field">
+        <label>Zone d'intervention (optionnel)</label>
+        <input type="text" id="ep_zone">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalEditProject')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveEditProject()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: MODIFIER FORAGE ─── -->
+<div class="modal-backdrop" id="modalEditForage">
+  <div class="modal">
+    <h2>Modifier le forage</h2>
+    <p class="sub">Corrige le code, la localité ou les coordonnées. Les données des étapes ne sont pas affectées.</p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Code du forage *</label>
+        <input type="text" id="ef_code">
+      </div>
+      <div class="form-field">
+        <label>Localité *</label>
+        <input type="text" id="ef_localite">
+      </div>
+      <div class="form-field">
+        <label>Coordonnées GPS (optionnel)</label>
+        <input type="text" id="ef_gps">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalEditForage')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveEditForage()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: MOUVEMENT DE MATÉRIEL ─── -->
+<div class="modal-backdrop" id="modalMovement">
+  <div class="modal">
+    <h2>Mouvement de matériel</h2>
+    <p class="sub">Enregistre un déplacement : achat livré, transfert entre forages, repli vers la base, perte...</p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Date *</label>
+        <input type="date" id="mv_date">
+      </div>
+      <div class="form-field">
+        <label>Depuis *</label>
+        <select id="mv_from" class="filter-select" style="width:100%" onchange="onMovementLocChange()"></select>
+        <input type="text" id="mv_from_autre" placeholder="Préciser le lieu d'origine" style="display:none;margin-top:6px;">
+      </div>
+      <div class="form-field">
+        <label>Vers *</label>
+        <select id="mv_to" class="filter-select" style="width:100%" onchange="onMovementLocChange()"></select>
+        <input type="text" id="mv_to_autre" placeholder="Préciser la destination (ex. Perte/Casse, Chantier X)" style="display:none;margin-top:6px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div class="form-field">
+          <label>PVC plein</label>
+          <input type="number" id="mv_pp" min="0" step="1" placeholder="0">
+        </div>
+        <div class="form-field">
+          <label>PVC crépiné</label>
+          <input type="number" id="mv_pc" min="0" step="1" placeholder="0">
+        </div>
+        <div class="form-field">
+          <label>Gravier (m³)</label>
+          <input type="number" id="mv_g" min="0" step="0.1" placeholder="0">
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Responsable</label>
+        <input type="text" id="mv_resp" placeholder="Qui a fait / validé le transfert">
+      </div>
+      <div class="form-field">
+        <label>Commentaire</label>
+        <textarea id="mv_comment" placeholder="Ex. récupération pour compléter l'appro de Kointa"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalMovement')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveMovement()">Enregistrer le mouvement</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: ABANDON DU FORAGE ─── -->
+<div class="modal-backdrop" id="modalAbandon">
+  <div class="modal">
+    <h2 style="color:var(--err)">Abandonner le forage</h2>
+    <p class="sub">Forage <strong id="ab_forageCode"></strong>. Cette action est définitive : le forage passera en archives avec le statut "Abandonné".</p>
+    <div class="modal-form">
+      <div class="form-field">
+        <label>Motif de l'abandon <span class="required-mark">*</span></label>
+        <textarea id="ab_reason" placeholder="Ex. eau non trouvée à profondeur prévue, formation rocheuse impénétrable, casse de tricône non réparable, accès terrain devenu impossible..."></textarea>
+        <span class="hint">Information essentielle pour le retour d'expérience SIYO.</span>
+      </div>
+      <div class="form-field">
+        <label>Date de l'abandon <span class="required-mark">*</span></label>
+        <input type="date" id="ab_date">
+      </div>
+      <div class="form-field">
+        <label>Décidé par</label>
+        <input type="text" id="ab_responsable" placeholder="Nom du responsable de la décision">
+      </div>
+      <div class="abandon-info" id="ab_replyInfo"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="cancelAbandon()">Annuler</button>
+      <button class="btn btn-danger" onclick="confirmAbandon()" style="background:var(--err);color:white;border-color:var(--err)">Confirmer l'abandon</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: CONFIRM ─── -->
+<div class="modal-backdrop" id="modalConfirm">
+  <div class="modal">
+    <h2 id="confirm_title">Confirmation</h2>
+    <p class="sub" id="confirm_text"></p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalConfirm')">Annuler</button>
+      <button class="btn btn-accent" id="confirm_ok">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  URL GOOGLE APPS SCRIPT — À CONFIGURER UNE FOIS              ║
+// ║  Remplace la valeur ci-dessous par l'URL de ton déploiement  ║
+// ║  Apps Script, puis sauvegarde le fichier. Tous les appareils ║
+// ║  qui ouvrent ce HTML partageront alors les mêmes données.    ║
+// ╚══════════════════════════════════════════════════════════════╝
+const API_URL = 'https://script.google.com/macros/s/AKfycbzBW26_9ehxqWaGp8kumlosqrWA1D6j8z4YI6Wr4jfn3TlC87PyTnt2knxc0a8xBbEyTQ/exec';
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION DES ÉTAPES
+// ═══════════════════════════════════════════════════════════════
+const STEPS = [
+  { id: 'implantation', num: 1, title: 'Implantation géophysique', deps: [] },
+  { id: 'approvisionnement', num: 2, title: 'Approvisionnement sur site', deps: [] },
+  { id: 'foration', num: 3, title: 'Foration', deps: ['implantation'] },
+  { id: 'essai_pompage', num: 4, title: 'Essai de pompage', deps: ['foration'] },
+  { id: 'repli', num: 5, title: 'Repli du matériel', deps: ['foration'] },
+  { id: 'analyse', num: 6, title: 'Analyse physico-chimique', deps: ['foration'] },
+  { id: 'dossier', num: 7, title: 'Dossier technique du forage', deps: ['implantation','approvisionnement','foration','essai_pompage','repli','analyse'] }
+];
+
+const FIELDS_BY_STEP = {
+  implantation: [
+    { key: 'profondeur_reco', label: 'Profondeur recommandée (ml)', type: 'number', required: true },
+    { key: 'epaisseur_alteration', label: 'Épaisseur d\'altération estimée (ml)', type: 'number', required: true }
+  ],
+  approvisionnement: [],  // saisie via le registre des mouvements (entrées)
+  foration: [
+    { key: 'profondeur_reelle', label: 'Profondeur de forage (ml)', type: 'number', required: true },
+    { key: 'debit_airlift', label: 'Débit air-lift (m³/h)', type: 'number', required: true },
+    { key: 'pvc_plein_used', label: 'PVC plein utilisé', type: 'number', required: true, validateApprov: 'pvc_plein_qty' },
+    { key: 'pvc_crepine_used', label: 'PVC crépiné utilisé', type: 'number', required: true, validateApprov: 'pvc_crepine_qty' }
+  ],
+  essai_pompage: [],
+  repli: [],  // saisie via le registre des mouvements (sorties)
+  analyse: [],
+  dossier: []
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ÉTAT
+// ═══════════════════════════════════════════════════════════════
+let state = {
+  projects: [],
+  movements: [],          // registre des mouvements de matériel
+  ledgerMigrated: false,  // migration des anciennes appros vers le registre
+  currentView: 'active',
+  currentProjectForForage: null,
+  pendingSync: false,
+  syncTimer: null,
+  isLoading: false,
+  lastSyncAt: null
+};
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITAIRES
+// ═══════════════════════════════════════════════════════════════
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function today() { return new Date().toISOString().slice(0,10); }
+
+function toast(msg, type = 'default', duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', duration);
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERSISTENCE (cache local uniquement, Sheets reste la source de vérité)
+// ═══════════════════════════════════════════════════════════════
+const CACHE_KEY = 'siyo_forages_cache_v1';
+
+function saveLocal() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      projects: state.projects,
+      movements: state.movements,
+      ledgerMigrated: state.ledgerMigrated,
+      cachedAt: new Date().toISOString()
+    }));
+  } catch(e) { console.error('Save local failed:', e); }
+}
+
+function loadLocalCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    state.projects = data.projects || [];
+    state.movements = data.movements || [];
+    state.ledgerMigrated = !!data.ledgerMigrated;
+    return true;
+  } catch(e) {
+    state.projects = [];
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC GOOGLE SHEETS
+// ═══════════════════════════════════════════════════════════════
+function isUrlConfigured() {
+  return API_URL && !API_URL.includes('__COLLER_ICI');
+}
+
+function setSyncStatus(status, message) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncStatus');
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = message;
+}
+
+function scheduleSync() {
+  if (!isUrlConfigured()) return;
+  if (state.syncTimer) clearTimeout(state.syncTimer);
+  state.pendingSync = true;
+  setSyncStatus('syncing', 'Sync...');
+  state.syncTimer = setTimeout(syncToSheet, 1200);
+}
+
+async function syncToSheet() {
+  if (!isUrlConfigured()) return;
+  try {
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'save',
+        projects: state.projects,
+        movements: state.movements,
+        ledgerMigrated: state.ledgerMigrated,
+        timestamp: new Date().toISOString()
+      })
+    });
+    state.pendingSync = false;
+    state.lastSyncAt = new Date();
+    setSyncStatus('ok', 'Sync · ' + state.lastSyncAt.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}));
+  } catch(e) {
+    console.error('Sync failed:', e);
+    setSyncStatus('error', 'Erreur sync');
+    toast('Erreur de synchronisation', 'error');
+  }
+}
+
+async function loadFromSheet() {
+  if (!isUrlConfigured()) return false;
+  try {
+    setSyncStatus('syncing', 'Chargement...');
+    state.isLoading = true;
+    const res = await fetch(API_URL + '?action=load&t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data && Array.isArray(data.projects)) {
+      state.projects = data.projects;
+      state.movements = Array.isArray(data.movements) ? data.movements : [];
+      state.ledgerMigrated = !!data.ledgerMigrated;
+      migrateToLedger();
+      saveLocal();
+      state.lastSyncAt = new Date();
+      setSyncStatus('ok', 'Sync · ' + state.lastSyncAt.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}));
+      state.isLoading = false;
+      return true;
+    }
+    setSyncStatus('ok', 'Aucune donnée distante');
+    state.isLoading = false;
+    return false;
+  } catch(e) {
+    console.error('Load failed:', e);
+    setSyncStatus('error', 'Erreur chargement');
+    state.isLoading = false;
+    return false;
+  }
+}
+
+async function manualRefresh() {
+  const loaded = await loadFromSheet();
+  if (loaded) {
+    render();
+    toast('Données rechargées', 'success');
+  } else {
+    toast('Aucune donnée à charger', 'default');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOGIQUE MÉTIER
+// ═══════════════════════════════════════════════════════════════
+function newForage(code, gps) {
+  const f = {
+    id: uid(),
+    code,
+    gps: gps || '',
+    closed: false,
+    abandoned: false,           // NOUVEAU : forage abandonné
+    abandonReason: '',          // NOUVEAU : motif d'abandon
+    abandonDate: '',            // NOUVEAU : date d'abandon
+    abandonResponsable: '',     // NOUVEAU : qui a décidé
+    createdAt: new Date().toISOString(),
+    closedAt: null,
+    steps: {}
+  };
+  STEPS.forEach(s => {
+    f.steps[s.id] = { done: false, date: '', responsable: '', commentaire: '', data: {} };
+  });
+  return f;
+}
+
+/**
+ * Vrai si le forage n'a aucune donnée saisie ni étape cochée.
+ * Sert à autoriser la suppression d'un forage créé par erreur.
+ */
+function isForageVierge(forage) {
+  return STEPS.every(s => {
+    const step = forage.steps[s.id];
+    if (step.done) return false;
+    if (step.date || step.responsable || step.commentaire) return false;
+    if (step.data && Object.values(step.data).some(v => v !== '' && v !== null && v !== undefined)) return false;
+    return true;
+  });
+}
+
+/**
+ * Vrai si le projet est vierge : aucun forage créé.
+ */
+function isProjectVierge(project) {
+  return !project.forages || project.forages.length === 0;
+}
+
+/**
+ * Vrai si l'étape Foration a été "ouverte" : au moins une donnée saisie OU étape cochée.
+ * Utilisé pour autoriser l'abandon dès qu'on a engagé le matériel.
+ */
+function isForationEngaged(forage) {
+  const f = forage.steps.foration;
+  if (f.done) return true;
+  if (f.date || f.responsable || f.commentaire) return true;
+  if (f.data && Object.values(f.data).some(v => v !== '' && v !== null && v !== undefined)) return true;
+  return false;
+}
+
+/**
+ * Vrai si on peut abandonner le forage : foration engagée ET pas déjà clos/abandonné.
+ */
+function canAbandonForage(forage) {
+  if (forage.closed || forage.abandoned) return false;
+  return isForationEngaged(forage);
+}
+
+function isStepAvailable(forage, stepId) {
+  const step = STEPS.find(s => s.id === stepId);
+  if (!step) return false;
+  if (forage.steps[stepId].done) return true;
+  // Cas spécial : si le forage est en cours d'abandon (drapeau temporaire) ou abandonné,
+  // l'étape Repli devient toujours accessible pour permettre de tracer le repli du matériel.
+  if (stepId === 'repli' && (forage.abandoned || forage._abandonInProgress)) return true;
+  return step.deps.every(dep => forage.steps[dep].done);
+}
+
+function forageProgress(forage) {
+  const total = STEPS.length;
+  const done = STEPS.filter(s => forage.steps[s.id].done).length;
+  return { done, total };
+}
+
+function canCloseForage(forage) {
+  return STEPS.every(s => forage.steps[s.id].done);
+}
+
+function projectProgress(project) {
+  if (!project.forages || project.forages.length === 0) return { done: 0, total: 0, forages: 0 };
+  let totalSteps = 0, doneSteps = 0;
+  project.forages.forEach(f => {
+    const p = forageProgress(f);
+    totalSteps += p.total;
+    doneSteps += p.done;
+  });
+  return { done: doneSteps, total: totalSteps, forages: project.forages.length };
+}
+
+/**
+ * Un projet est archivé si tous ses forages sont soit clôturés soit abandonnés.
+ */
+function isProjectArchived(project) {
+  return project.forages.length > 0 && project.forages.every(f => f.closed || f.abandoned);
+}
+
+function getReplyMaterial(forage) {
+  const sin = sumMovementsIn(forage.id);
+  const fd = forage.steps.foration.data || {};
+  const pu = Number(fd.pvc_plein_used) || 0;
+  const cu = Number(fd.pvc_crepine_used) || 0;
+  return {
+    pvc_plein: Math.max(0, sin.pp - pu),
+    pvc_crepine: Math.max(0, sin.pc - cu)
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGISTRE DES MOUVEMENTS DE MATÉRIEL (ledger)
+// Un mouvement : { id, date, pvc_plein, pvc_crepine, gravier,
+//   from: {type:'achat'|'base'|'forage'|'autre', forageId?, label},
+//   to:   {type:'base'|'forage'|'autre', forageId?, label},
+//   responsable, commentaire, createdAt }
+// ═══════════════════════════════════════════════════════════════
+function forageById(fid) {
+  for (const p of state.projects) {
+    const f = p.forages.find(x => x.id === fid);
+    if (f) return { project: p, forage: f };
+  }
+  return null;
+}
+
+function locKey(loc) {
+  if (!loc) return null;
+  if (loc.type === 'base') return 'base';
+  if (loc.type === 'forage') return 'forage:' + loc.forageId;
+  if (loc.type === 'autre') return 'autre:' + (loc.label || '?');
+  return null; // 'achat' : source externe, pas un lieu de stock
+}
+
+function locDisplay(loc) {
+  if (!loc) return '?';
+  if (loc.type === 'achat') return '🛒 Achat neuf';
+  if (loc.type === 'base') return '🏠 Base SIYO';
+  return loc.label || '?';
+}
+
+function movementsIn(fid) {
+  return state.movements.filter(m => m.to && m.to.type === 'forage' && m.to.forageId === fid);
+}
+
+function movementsOut(fid) {
+  return state.movements.filter(m => m.from && m.from.type === 'forage' && m.from.forageId === fid);
+}
+
+function sumMov(list) {
+  return list.reduce((a, m) => ({
+    pp: a.pp + (Number(m.pvc_plein) || 0),
+    pc: a.pc + (Number(m.pvc_crepine) || 0),
+    g:  a.g  + (Number(m.gravier) || 0)
+  }), { pp: 0, pc: 0, g: 0 });
+}
+
+function sumMovementsIn(fid) { return sumMov(movementsIn(fid)); }
+function sumMovementsOut(fid) { return sumMov(movementsOut(fid)); }
+
+/**
+ * Stock courant d'un site de forage : entrées − sorties − consommation.
+ * PVC consommés = saisis à la foration. Gravier consommé à 100% dès foration faite.
+ */
+function stockOfForage(forage) {
+  const sin = sumMovementsIn(forage.id);
+  const sout = sumMovementsOut(forage.id);
+  const fd = forage.steps.foration.data || {};
+  const pu = forage.steps.foration.done ? (Number(fd.pvc_plein_used) || 0) : 0;
+  const cu = forage.steps.foration.done ? (Number(fd.pvc_crepine_used) || 0) : 0;
+  const gConso = forage.steps.foration.done ? Math.max(0, sin.g - sout.g) : 0;
+  return {
+    pp: sin.pp - sout.pp - pu,
+    pc: sin.pc - sout.pc - cu,
+    g:  sin.g - sout.g - gConso
+  };
+}
+
+/**
+ * Stocks agrégés par lieu (base, forages, autres lieux).
+ */
+function computeStocks() {
+  const stocks = {}; // key -> {pp, pc, g, label}
+  function add(k, label, pp, pc, g) {
+    if (!k) return;
+    if (!stocks[k]) stocks[k] = { pp: 0, pc: 0, g: 0, label };
+    stocks[k].pp += pp; stocks[k].pc += pc; stocks[k].g += g;
+  }
+  state.movements.forEach(m => {
+    const qpp = Number(m.pvc_plein) || 0, qpc = Number(m.pvc_crepine) || 0, qg = Number(m.gravier) || 0;
+    add(locKey(m.from), locDisplay(m.from), -qpp, -qpc, -qg);
+    add(locKey(m.to), locDisplay(m.to), +qpp, +qpc, +qg);
+  });
+  // Consommation sur les sites de forage
+  state.projects.forEach(p => p.forages.forEach(f => {
+    if (f.steps.foration.done) {
+      const fd = f.steps.foration.data || {};
+      const k = 'forage:' + f.id;
+      const label = f.code + (f.localite ? ' — ' + f.localite : '');
+      add(k, label, -(Number(fd.pvc_plein_used) || 0), -(Number(fd.pvc_crepine_used) || 0), 0);
+      // Gravier consommé intégralement à la foration
+      if (stocks[k] && stocks[k].g > 0) stocks[k].g = 0;
+    }
+  }));
+  return stocks;
+}
+
+/**
+ * Migration unique : convertit les anciennes appros/replis saisis en mouvements.
+ */
+function migrateToLedger() {
+  if (state.ledgerMigrated) return;
+  let created = 0;
+  state.projects.forEach(p => {
+    p.forages.forEach(f => {
+      const label = f.code + (f.localite ? ' — ' + f.localite : '');
+      const ad = (f.steps.approvisionnement.data) || {};
+      const pa = Number(ad.pvc_plein_qty) || 0;
+      const ca = Number(ad.pvc_crepine_qty) || 0;
+      const g = Number(ad.gravier_m3) || 0;
+      if (pa > 0 || ca > 0 || g > 0) {
+        state.movements.push({
+          id: uid(), date: f.steps.approvisionnement.date || (f.createdAt || '').slice(0,10),
+          pvc_plein: pa, pvc_crepine: ca, gravier: g,
+          from: { type: 'achat', label: 'Achat neuf' },
+          to: { type: 'forage', forageId: f.id, label },
+          responsable: f.steps.approvisionnement.responsable || '',
+          commentaire: 'Migration automatique : approvisionnement historique',
+          createdAt: new Date().toISOString()
+        });
+        created++;
+      }
+      if (f.steps.repli.done) {
+        const fd = (f.steps.foration.data) || {};
+        const restPP = Math.max(0, pa - (Number(fd.pvc_plein_used) || 0));
+        const restPC = Math.max(0, ca - (Number(fd.pvc_crepine_used) || 0));
+        if (restPP > 0 || restPC > 0) {
+          const dest = ((f.steps.repli.data) || {}).destination || 'Destination non précisée';
+          state.movements.push({
+            id: uid(), date: f.steps.repli.date || '',
+            pvc_plein: restPP, pvc_crepine: restPC, gravier: 0,
+            from: { type: 'forage', forageId: f.id, label },
+            to: { type: 'autre', label: dest },
+            responsable: f.steps.repli.responsable || '',
+            commentaire: 'Migration automatique : repli historique',
+            createdAt: new Date().toISOString()
+          });
+          created++;
+        }
+      }
+    });
+  });
+  state.ledgerMigrated = true;
+  if (created > 0) {
+    saveLocal();
+    scheduleSync();
+    console.log('Migration ledger : ' + created + ' mouvement(s) créé(s)');
+  }
+}
+
+// ─── SAISIE D'UN MOUVEMENT ───
+let movementPrefill = null;
+
+function locOptionsHtml(selected, includeAchat) {
+  let html = '';
+  if (includeAchat) html += `<option value="achat" ${selected==='achat'?'selected':''}>🛒 Achat neuf</option>`;
+  html += `<option value="base" ${selected==='base'?'selected':''}>🏠 Base SIYO</option>`;
+  state.projects.forEach(p => {
+    p.forages.forEach(f => {
+      const v = 'forage:' + f.id;
+      const arch = (f.closed || f.abandoned) ? ' (archivé)' : '';
+      html += `<option value="${v}" ${selected===v?'selected':''}>${escapeHtml(p.name.slice(0,18))} · ${escapeHtml(f.code)} — ${escapeHtml(f.localite || '')}${arch}</option>`;
+    });
+  });
+  html += `<option value="autre" ${selected==='autre'?'selected':''}>✏️ Autre lieu...</option>`;
+  return html;
+}
+
+function openMovementModal(prefFrom, prefTo) {
+  movementPrefill = { from: prefFrom || null, to: prefTo || null };
+  document.getElementById('mv_from').innerHTML = locOptionsHtml(prefFrom || 'achat', true);
+  document.getElementById('mv_to').innerHTML = locOptionsHtml(prefTo || 'base', false);
+  document.getElementById('mv_from_autre').style.display = 'none';
+  document.getElementById('mv_to_autre').style.display = 'none';
+  document.getElementById('mv_from_autre').value = '';
+  document.getElementById('mv_to_autre').value = '';
+  document.getElementById('mv_date').value = today();
+  document.getElementById('mv_pp').value = '';
+  document.getElementById('mv_pc').value = '';
+  document.getElementById('mv_g').value = '';
+  document.getElementById('mv_resp').value = '';
+  document.getElementById('mv_comment').value = '';
+  onMovementLocChange();
+  openModal('modalMovement');
+}
+
+function onMovementLocChange() {
+  document.getElementById('mv_from_autre').style.display =
+    document.getElementById('mv_from').value === 'autre' ? 'block' : 'none';
+  document.getElementById('mv_to_autre').style.display =
+    document.getElementById('mv_to').value === 'autre' ? 'block' : 'none';
+}
+
+function parseLocValue(val, autreText) {
+  if (val === 'achat') return { type: 'achat', label: 'Achat neuf' };
+  if (val === 'base') return { type: 'base', label: 'Base SIYO' };
+  if (val === 'autre') return { type: 'autre', label: autreText.trim() || 'Autre lieu' };
+  if (val.startsWith('forage:')) {
+    const fid = val.slice(7);
+    const found = forageById(fid);
+    const label = found ? found.forage.code + (found.forage.localite ? ' — ' + found.forage.localite : '') : 'Forage inconnu';
+    return { type: 'forage', forageId: fid, label };
+  }
+  return null;
+}
+
+async function saveMovement() {
+  const from = parseLocValue(document.getElementById('mv_from').value, document.getElementById('mv_from_autre').value);
+  const to = parseLocValue(document.getElementById('mv_to').value, document.getElementById('mv_to_autre').value);
+  const date = document.getElementById('mv_date').value;
+  const pp = Number(document.getElementById('mv_pp').value) || 0;
+  const pc = Number(document.getElementById('mv_pc').value) || 0;
+  const g = Number(document.getElementById('mv_g').value) || 0;
+  
+  if (!date) { toast('La date est obligatoire', 'error'); return; }
+  if (pp <= 0 && pc <= 0 && g <= 0) { toast('Renseigne au moins une quantité', 'error'); return; }
+  if (pp < 0 || pc < 0 || g < 0) { toast('Les quantités doivent être positives', 'error'); return; }
+  if (locKey(from) && locKey(to) && locKey(from) === locKey(to)) { toast('Origine et destination identiques', 'error'); return; }
+  if (to.type === 'achat') { toast('La destination ne peut pas être un achat', 'error'); return; }
+  
+  state.movements.push({
+    id: uid(), date,
+    pvc_plein: pp, pvc_crepine: pc, gravier: g,
+    from, to,
+    responsable: document.getElementById('mv_resp').value.trim(),
+    commentaire: document.getElementById('mv_comment').value.trim(),
+    createdAt: new Date().toISOString()
+  });
+  saveLocal();
+  scheduleSync();
+  closeModal('modalMovement');
+  rerenderPreservingState();
+  toast('Mouvement enregistré', 'success');
+}
+
+function confirmDeleteMovement(movId) {
+  const m = state.movements.find(x => x.id === movId);
+  if (!m) return;
+  document.getElementById('confirm_title').textContent = 'Supprimer le mouvement';
+  document.getElementById('confirm_text').textContent = `Supprimer ce mouvement du ${m.date ? new Date(m.date).toLocaleDateString('fr-FR') : '?'} (${locDisplay(m.from)} → ${locDisplay(m.to)}) ? Les stocks seront recalculés.`;
+  document.getElementById('confirm_ok').onclick = async () => {
+    state.movements = state.movements.filter(x => x.id !== movId);
+    saveLocal();
+    scheduleSync();
+    closeModal('modalConfirm');
+    rerenderPreservingState();
+    toast('Mouvement supprimé', 'success');
+  };
+  openModal('modalConfirm');
+}
+
+/**
+ * Retourne la liste des champs obligatoires manquants pour une étape.
+ * Tableau vide = tout est rempli, on peut cocher.
+ */
+function getMissingRequired(forage, stepId) {
+  // Cas spécial : l'appro exige au moins une entrée de matériel dans le registre
+  if (stepId === 'approvisionnement') {
+    return movementsIn(forage.id).length === 0 ? ['Au moins une entrée de matériel (bouton dans le formulaire)'] : [];
+  }
+  // Cas spécial : le repli exige que le stock du site soit soldé (transferts ou perte enregistrés)
+  if (stepId === 'repli') {
+    const st = stockOfForage(forage);
+    if (st.pp > 0 || st.pc > 0) {
+      return ['Stock restant sur site : ' + st.pp + ' PVC plein, ' + st.pc + ' PVC crépiné — enregistre le(s) transfert(s) sortant(s)'];
+    }
+    return [];
+  }
+  const fields = FIELDS_BY_STEP[stepId] || [];
+  const data = forage.steps[stepId].data || {};
+  const missing = [];
+  fields.forEach(f => {
+    if (!f.required) return;
+    const val = data[f.key];
+    if (val === undefined || val === null || String(val).trim() === '') {
+      missing.push(f.label);
+    }
+  });
+  return missing;
+}
+
+/**
+ * Sauvegarde/restaure l'état d'expansion des projets/forages/étapes.
+ * Évite que les rubriques ouvertes se referment lors du re-render.
+ */
+function captureExpandedState() {
+  const expanded = { projects: [], forages: [], steps: [] };
+  document.querySelectorAll('.project.expanded').forEach(el => {
+    expanded.projects.push(el.getAttribute('data-project-id'));
+  });
+  document.querySelectorAll('.forage.expanded').forEach(el => {
+    expanded.forages.push(el.getAttribute('data-forage-id'));
+  });
+  document.querySelectorAll('.step.expanded').forEach(el => {
+    expanded.steps.push(el.getAttribute('data-step-key'));
+  });
+  return expanded;
+}
+
+function restoreExpandedState(expanded) {
+  expanded.projects.forEach(id => {
+    const el = document.querySelector(`[data-project-id="${id}"]`);
+    if (el) el.classList.add('expanded');
+  });
+  expanded.forages.forEach(id => {
+    const el = document.querySelector(`[data-forage-id="${id}"]`);
+    if (el) el.classList.add('expanded');
+  });
+  expanded.steps.forEach(key => {
+    const el = document.querySelector(`[data-step-key="${key}"]`);
+    if (el) el.classList.add('expanded');
+  });
+}
+
+/**
+ * Refocus le champ qui était en édition après re-render.
+ */
+function captureFocus() {
+  const el = document.activeElement;
+  if (!el || el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return null;
+  // Identifie via le onchange handler qui contient project/forage/step/field
+  const handler = el.getAttribute('onchange') || '';
+  const match = handler.match(/updateStepField\('([^']+)','([^']+)','([^']+)','([^']+)'/);
+  if (!match) return null;
+  return {
+    projectId: match[1],
+    forageId: match[2],
+    stepId: match[3],
+    field: match[4],
+    selStart: el.selectionStart,
+    selEnd: el.selectionEnd
+  };
+}
+
+function restoreFocus(focus) {
+  if (!focus) return;
+  // Cherche l'input correspondant
+  const selector = `[onchange*="updateStepField('${focus.projectId}','${focus.forageId}','${focus.stepId}','${focus.field}'"]`;
+  const el = document.querySelector(selector);
+  if (el) {
+    el.focus();
+    if (focus.selStart !== null && el.setSelectionRange) {
+      try { el.setSelectionRange(focus.selStart, focus.selEnd); } catch(e) {}
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIONS UI
+// ═══════════════════════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openNewProject() {
+  document.getElementById('np_name').value = '';
+  document.getElementById('np_description').value = '';
+  document.getElementById('np_client').value = '';
+  document.getElementById('np_zone').value = '';
+  openModal('modalNewProject');
+  setTimeout(() => document.getElementById('np_name').focus(), 100);
+}
+
+async function createProject() {
+  const name = document.getElementById('np_name').value.trim();
+  const client = document.getElementById('np_client').value.trim();
+  const zone = document.getElementById('np_zone').value.trim();
+  const description = document.getElementById('np_description').value.trim();
+  if (!name || !client) {
+    toast('Nom et client sont requis', 'error');
+    return;
+  }
+  const newProject = {
+    id: uid(),
+    name, client, zone, description,
+    createdAt: new Date().toISOString(),
+    forages: []
+  };
+  state.projects.unshift(newProject);
+  saveLocal();
+  scheduleSync();
+  closeModal('modalNewProject');
+  toast('Projet créé — ajoute maintenant ses forages', 'success');
+  // Enchaîne directement sur l'écran des forages du nouveau projet
+  state.currentView = 'active';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'active'));
+  navTo('forages', newProject.id, null);
+}
+
+function openNewForage(projectId) {
+  const p = state.projects.find(p => p.id === projectId);
+  if (!p) return;
+  state.currentProjectForForage = projectId;
+  document.getElementById('nf_projectName').textContent = p.name + (p.zone ? ' — ' + p.zone : '');
+  document.getElementById('nf_code').value = 'F' + (p.forages.length + 1);
+  document.getElementById('nf_localite').value = '';
+  document.getElementById('nf_gps').value = '';
+  openModal('modalNewForage');
+  setTimeout(() => document.getElementById('nf_code').focus(), 100);
+}
+
+async function createForage() {
+  const code = document.getElementById('nf_code').value.trim();
+  const localite = document.getElementById('nf_localite').value.trim();
+  const gps = document.getElementById('nf_gps').value.trim();
+  if (!code) {
+    toast('Le code du forage est requis', 'error');
+    return;
+  }
+  if (!localite) {
+    toast('La localité du forage est requise', 'error');
+    return;
+  }
+  const p = state.projects.find(p => p.id === state.currentProjectForForage);
+  if (!p) return;
+  if (p.forages.some(f => f.code === code)) {
+    toast('Ce code existe déjà dans ce projet', 'error');
+    return;
+  }
+  const newF = newForage(code, gps);
+  newF.localite = localite;
+  p.forages.push(newF);
+  saveLocal();
+  scheduleSync();
+  closeModal('modalNewForage');
+  toast('Forage ajouté', 'success');
+  // Ouvre directement le nouveau forage pour commencer la saisie
+  navTo('forage', p.id, newF.id);
+}
+
+// ─── ÉDITION DES MÉTADONNÉES PROJET ───
+let editingProjectId = null;
+
+function openEditProject(projectId, ev) {
+  if (ev) ev.stopPropagation();
+  const p = state.projects.find(p => p.id === projectId);
+  if (!p) return;
+  if (isProjectArchived(p)) {
+    toast('Projet archivé : modification impossible (lecture seule)', 'error', 4000);
+    return;
+  }
+  editingProjectId = projectId;
+  document.getElementById('ep_name').value = p.name || '';
+  document.getElementById('ep_description').value = p.description || '';
+  document.getElementById('ep_client').value = p.client || '';
+  document.getElementById('ep_zone').value = p.zone || '';
+  openModal('modalEditProject');
+  setTimeout(() => document.getElementById('ep_name').focus(), 100);
+}
+
+async function saveEditProject() {
+  const p = state.projects.find(p => p.id === editingProjectId);
+  if (!p) return;
+  const name = document.getElementById('ep_name').value.trim();
+  const client = document.getElementById('ep_client').value.trim();
+  const zone = document.getElementById('ep_zone').value.trim();
+  const description = document.getElementById('ep_description').value.trim();
+  if (!name || !client) {
+    toast('Nom et client sont requis', 'error');
+    return;
+  }
+  p.name = name;
+  p.client = client;
+  p.zone = zone;
+  p.description = description;
+  editingProjectId = null;
+  saveLocal();
+  scheduleSync();
+  closeModal('modalEditProject');
+  render();
+  toast('Projet modifié', 'success');
+}
+
+// ─── ÉDITION DES MÉTADONNÉES FORAGE ───
+let editingForageContext = null;
+
+function openEditForage(projectId, forageId, ev) {
+  if (ev) ev.stopPropagation();
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (f.closed || f.abandoned) {
+    toast('Forage archivé : modification impossible (lecture seule)', 'error', 4000);
+    return;
+  }
+  editingForageContext = { projectId, forageId };
+  document.getElementById('ef_code').value = f.code || '';
+  document.getElementById('ef_localite').value = f.localite || '';
+  document.getElementById('ef_gps').value = f.gps || '';
+  openModal('modalEditForage');
+  setTimeout(() => document.getElementById('ef_code').focus(), 100);
+}
+
+async function saveEditForage() {
+  if (!editingForageContext) return;
+  const { projectId, forageId } = editingForageContext;
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  const code = document.getElementById('ef_code').value.trim();
+  const localite = document.getElementById('ef_localite').value.trim();
+  const gps = document.getElementById('ef_gps').value.trim();
+  if (!code) {
+    toast('Le code du forage est requis', 'error');
+    return;
+  }
+  if (!localite) {
+    toast('La localité du forage est requise', 'error');
+    return;
+  }
+  // Vérifier qu'on ne crée pas un doublon de code dans le même projet
+  if (p.forages.some(x => x.id !== forageId && x.code === code)) {
+    toast('Ce code existe déjà dans ce projet', 'error');
+    return;
+  }
+  f.code = code;
+  f.localite = localite;
+  f.gps = gps;
+  editingForageContext = null;
+  saveLocal();
+  scheduleSync();
+  closeModal('modalEditForage');
+  render();
+  toast('Forage modifié', 'success');
+}
+
+async function toggleStep(projectId, forageId, stepId, ev) {
+  ev.stopPropagation();
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (!isStepAvailable(f, stepId)) {
+    toast('Cette étape dépend d\'une étape précédente', 'error');
+    return;
+  }
+  const step = f.steps[stepId];
+  if (!step.done) {
+    // Vérifier les champs obligatoires avant de cocher
+    const missing = getMissingRequired(f, stepId);
+    if (missing.length > 0) {
+      toast('Champs obligatoires manquants : ' + missing.join(', '), 'error', 5000);
+      // Ouvre automatiquement le formulaire de cette étape (persiste)
+      const stepEl = expandStep(forageId, stepId);
+      if (stepEl) {
+        // Focus sur le premier champ vide
+        setTimeout(() => {
+          const fields = FIELDS_BY_STEP[stepId] || [];
+          for (const fld of fields) {
+            if (fld.required && (!step.data[fld.key] || String(step.data[fld.key]).trim() === '')) {
+              const sel = `[onchange*="updateStepField('${projectId}','${forageId}','${stepId}','${fld.key}'"]`;
+              const input = document.querySelector(sel);
+              if (input) { input.focus(); break; }
+            }
+          }
+        }, 50);
+      }
+      return;
+    }
+    step.done = true;
+    if (!step.date) step.date = today();
+  } else {
+    // Check si une étape qui dépend de celle-ci est faite
+    const dependents = STEPS.filter(s => s.deps.includes(stepId));
+    const hasDependentDone = dependents.some(s => f.steps[s.id].done);
+    if (hasDependentDone) {
+      toast('Impossible : une étape suivante en dépend', 'error');
+      return;
+    }
+    step.done = false;
+  }
+  saveLocal();
+  scheduleSync();
+  
+  // Si on vient de valider le Repli alors qu'un abandon est en cours, finaliser l'abandon
+  if (stepId === 'repli' && step.done && f._abandonInProgress && !f.abandoned) {
+    finalizeAbandon(projectId, forageId);
+    return;
+  }
+  
+  rerenderPreservingState();
+}
+
+async function updateStepField(projectId, forageId, stepId, field, value) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (field === 'date' || field === 'responsable' || field === 'commentaire') {
+    f.steps[stepId][field] = value;
+  } else {
+    f.steps[stepId].data[field] = value;
+  }
+  saveLocal();
+  scheduleSync();
+  // Re-render avec préservation de l'état d'expansion seulement si affecte d'autres affichages
+  // (calcul de repli dépendant de l'approvisionnement ou foration)
+  if (stepId === 'approvisionnement' || stepId === 'foration') {
+    rerenderPreservingState();
+  }
+}
+
+/**
+ * Re-render complet en préservant l'état d'expansion ET le focus de l'input courant.
+ * L'expansion persistée (expandedUI) est réappliquée dans render() ; on capture aussi
+ * l'état DOM courant en complément pour couvrir les expansions transitoires.
+ */
+function rerenderPreservingState() {
+  const expanded = captureExpandedState();
+  const focus = captureFocus();
+  render();
+  restoreExpandedState(expanded);
+  restoreFocus(focus);
+}
+
+function confirmCloseForage(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (!canCloseForage(f)) {
+    toast('Toutes les étapes doivent être validées avant clôture', 'error');
+    return;
+  }
+  document.getElementById('confirm_title').textContent = 'Clôturer le forage';
+  document.getElementById('confirm_text').textContent = `Confirmer la clôture du forage ${f.code} ? Il sera déplacé dans les archives si tous les forages du projet sont clôturés ou abandonnés.`;
+  document.getElementById('confirm_ok').onclick = () => doCloseForage(projectId, forageId);
+  openModal('modalConfirm');
+}
+
+async function doCloseForage(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  f.closed = true;
+  f.closedAt = new Date().toISOString();
+  saveLocal();
+  scheduleSync();
+  closeModal('modalConfirm');
+  render();
+  if (isProjectArchived(p)) {
+    toast('Projet archivé : tous les forages terminés', 'success', 4000);
+  } else {
+    toast('Forage clôturé', 'success');
+  }
+}
+
+async function reopenForage(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  // Réactivation : annule clôture ET abandon
+  f.closed = false;
+  f.closedAt = null;
+  f.abandoned = false;
+  f.abandonReason = '';
+  f.abandonDate = '';
+  f.abandonResponsable = '';
+  delete f._abandonInProgress;
+  saveLocal();
+  scheduleSync();
+  render();
+  toast('Forage réactivé', 'success');
+}
+
+// ─── SUPPRESSION (uniquement si vierge) ───
+function confirmDeleteProject(projectId) {
+  const p = state.projects.find(p => p.id === projectId);
+  if (!p) return;
+  if (!isProjectVierge(p)) {
+    toast('Impossible : le projet contient déjà des forages', 'error', 4000);
+    return;
+  }
+  document.getElementById('confirm_title').textContent = 'Supprimer le projet';
+  document.getElementById('confirm_text').textContent = `Supprimer "${p.name}" ? Le projet est vide, aucune donnée ne sera perdue.`;
+  document.getElementById('confirm_ok').onclick = async () => {
+    state.projects = state.projects.filter(x => x.id !== projectId);
+    saveLocal();
+    scheduleSync();
+    closeModal('modalConfirm');
+    render();
+    toast('Projet supprimé', 'success');
+  };
+  openModal('modalConfirm');
+}
+
+function confirmDeleteForage(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (!isForageVierge(f)) {
+    toast('Impossible : ce forage contient déjà des données', 'error', 4000);
+    return;
+  }
+  document.getElementById('confirm_title').textContent = 'Supprimer le forage';
+  document.getElementById('confirm_text').textContent = `Supprimer le forage ${f.code} ? Il est vide, aucune donnée ne sera perdue.`;
+  document.getElementById('confirm_ok').onclick = async () => {
+    p.forages = p.forages.filter(x => x.id !== forageId);
+    saveLocal();
+    scheduleSync();
+    closeModal('modalConfirm');
+    render();
+    toast('Forage supprimé', 'success');
+  };
+  openModal('modalConfirm');
+}
+
+// ─── ABANDON DU FORAGE ───
+let pendingAbandonContext = null;
+
+function openAbandonModal(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  if (!canAbandonForage(f)) {
+    toast('Abandon impossible : la foration doit avoir été engagée (au moins un champ rempli)', 'error', 5000);
+    return;
+  }
+  pendingAbandonContext = { projectId, forageId };
+  document.getElementById('ab_forageCode').textContent = f.code + (f.localite ? ' — ' + f.localite : '');
+  document.getElementById('ab_reason').value = '';
+  document.getElementById('ab_date').value = today();
+  document.getElementById('ab_responsable').value = '';
+  
+  // Si la foration est marquée faite, on n'a pas forcément besoin de replier
+  // Si la foration n'est pas marquée faite (abandon en cours de foration), le repli devient obligatoire
+  const f_step = f.steps.foration;
+  const replOk = f.steps.repli.done;
+  const replNeeded = !replOk; // tant que le repli n'est pas fait, on doit y passer
+  
+  document.getElementById('ab_replyInfo').innerHTML = replNeeded ? 
+    `<strong>Action requise après cet abandon :</strong> renseigner et valider l'étape <strong>Repli du matériel</strong> avant que le forage ne passe en archives. Le bouton de validation finale apparaîtra une fois le repli effectué.` :
+    `Le repli du matériel est déjà validé. Après confirmation, le forage passera directement en archives.`;
+  
+  openModal('modalAbandon');
+  setTimeout(() => document.getElementById('ab_reason').focus(), 100);
+}
+
+async function confirmAbandon() {
+  if (!pendingAbandonContext) return;
+  const { projectId, forageId } = pendingAbandonContext;
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  
+  const reason = document.getElementById('ab_reason').value.trim();
+  const date = document.getElementById('ab_date').value;
+  const responsable = document.getElementById('ab_responsable').value.trim();
+  
+  if (!reason) {
+    toast('Le motif d\'abandon est obligatoire', 'error');
+    return;
+  }
+  if (!date) {
+    toast('La date d\'abandon est obligatoire', 'error');
+    return;
+  }
+  
+  // Marque l'abandon en cours : le repli devient accessible
+  f._abandonInProgress = true;
+  f.abandonReason = reason;
+  f.abandonDate = date;
+  f.abandonResponsable = responsable;
+  
+  // Si repli déjà fait → finalise immédiatement
+  // Sinon, on attend que le repli soit fait pour finaliser
+  if (f.steps.repli.done) {
+    finalizeAbandon(projectId, forageId);
+  } else {
+    saveLocal();
+    scheduleSync();
+    closeModal('modalAbandon');
+    render();
+    toast('Abandon déclaré. Valide maintenant l\'étape Repli du matériel pour finaliser.', 'success', 6000);
+    // Ouvre automatiquement l'étape repli (persiste)
+    setTimeout(() => {
+      const stepEl = expandStep(forageId, 'repli');
+      if (stepEl) {
+        stepEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }
+    }, 200);
+  }
+}
+
+function finalizeAbandon(projectId, forageId) {
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (!f) return;
+  f.abandoned = true;
+  f.closed = false;
+  f.closedAt = new Date().toISOString(); // on garde une date de "fermeture" pour l'archive
+  delete f._abandonInProgress;
+  pendingAbandonContext = null;
+  saveLocal();
+  scheduleSync();
+  closeModal('modalAbandon');
+  render();
+  if (isProjectArchived(p)) {
+    toast('Projet archivé : tous les forages terminés', 'success', 4000);
+  } else {
+    toast('Forage abandonné et archivé', 'success', 4000);
+  }
+}
+
+function cancelAbandon() {
+  if (!pendingAbandonContext) {
+    closeModal('modalAbandon');
+    return;
+  }
+  // Si on annule alors qu'on était en mode "abandon en cours", on reset
+  const { projectId, forageId } = pendingAbandonContext;
+  const p = state.projects.find(p => p.id === projectId);
+  const f = p.forages.find(f => f.id === forageId);
+  if (f && f._abandonInProgress && !f.abandoned) {
+    delete f._abandonInProgress;
+    f.abandonReason = '';
+    f.abandonDate = '';
+    f.abandonResponsable = '';
+    saveLocal();
+    scheduleSync();
+  }
+  pendingAbandonContext = null;
+  closeModal('modalAbandon');
+  render();
+}
+
+// ─── ÉTAT D'EXPANSION PERSISTANT (mémorisé entre les sessions) ───
+let expandedUI = { projects: [], forages: [], steps: [] };
+
+function loadExpandedUI() {
+  try {
+    const raw = localStorage.getItem('siyo_forages_ui_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      expandedUI = {
+        projects: parsed.projects || [],
+        forages: parsed.forages || [],
+        steps: parsed.steps || []
+      };
+    }
+  } catch(e) {}
+}
+
+function saveExpandedUI() {
+  try { localStorage.setItem('siyo_forages_ui_v1', JSON.stringify(expandedUI)); } catch(e) {}
+}
+
+function toggleInList(list, id) {
+  const i = list.indexOf(id);
+  if (i >= 0) list.splice(i, 1); else list.push(id);
+}
+
+function applyExpandedUI() {
+  expandedUI.projects.forEach(id => {
+    const el = document.querySelector(`[data-project-id="${id}"]`);
+    if (el) el.classList.add('expanded');
+  });
+  expandedUI.forages.forEach(id => {
+    const el = document.querySelector(`[data-forage-id="${id}"]`);
+    if (el) el.classList.add('expanded');
+  });
+  expandedUI.steps.forEach(key => {
+    const el = document.querySelector(`[data-step-key="${key}"]`);
+    if (el && !el.classList.contains('locked')) el.classList.add('expanded');
+  });
+}
+
+function expandStep(forageId, stepId) {
+  const key = forageId + '_' + stepId;
+  if (!expandedUI.steps.includes(key)) {
+    expandedUI.steps.push(key);
+    saveExpandedUI();
+  }
+  const el = document.querySelector(`[data-step-key="${key}"]`);
+  if (el && !el.classList.contains('locked')) el.classList.add('expanded');
+  return el;
+}
+
+function toggleProject(projectId) {
+  toggleInList(expandedUI.projects, projectId);
+  saveExpandedUI();
+  const el = document.querySelector(`[data-project-id="${projectId}"]`);
+  if (el) el.classList.toggle('expanded');
+}
+
+function toggleForage(forageId) {
+  toggleInList(expandedUI.forages, forageId);
+  saveExpandedUI();
+  const el = document.querySelector(`[data-forage-id="${forageId}"]`);
+  if (el) el.classList.toggle('expanded');
+}
+
+function toggleStepExpand(forageId, stepId, ev) {
+  if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA' || ev.target.classList.contains('step-check')) return;
+  const el = document.querySelector(`[data-step-key="${forageId}_${stepId}"]`);
+  if (el && !el.classList.contains('locked')) {
+    toggleInList(expandedUI.steps, forageId + '_' + stepId);
+    saveExpandedUI();
+    el.classList.toggle('expanded');
+  }
+}
+
+function switchView(view) {
+  state.currentView = view;
+  try { localStorage.setItem('siyo_forages_view_v1', view); } catch(e) {}
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  render();
+}
+
+// ─── NAVIGATION DRILL-DOWN ───
+let nav = { screen: 'projects', projectId: null, forageId: null };
+
+function loadNav() {
+  try {
+    const raw = localStorage.getItem('siyo_forages_nav_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      nav = { screen: parsed.screen || 'projects', projectId: parsed.projectId || null, forageId: parsed.forageId || null };
+    }
+  } catch(e) {}
+}
+
+function saveNav() {
+  try { localStorage.setItem('siyo_forages_nav_v1', JSON.stringify(nav)); } catch(e) {}
+}
+
+function navTo(screen, projectId, forageId) {
+  nav.screen = screen;
+  nav.projectId = projectId !== undefined ? projectId : nav.projectId;
+  nav.forageId = forageId !== undefined ? forageId : null;
+  saveNav();
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/**
+ * Vérifie la validité de la navigation : si le projet/forage visé n'existe plus
+ * ou est parti en archives, remonte au niveau parent.
+ */
+function ensureNavValid() {
+  if (nav.screen === 'projects') return;
+  const p = state.projects.find(p => p.id === nav.projectId);
+  if (!p || isProjectArchived(p)) {
+    nav.screen = 'projects'; nav.projectId = null; nav.forageId = null;
+    saveNav();
+    return;
+  }
+  if (nav.screen === 'forage') {
+    const f = p.forages.find(f => f.id === nav.forageId);
+    if (!f || f.closed || f.abandoned) {
+      nav.screen = 'forages'; nav.forageId = null;
+      saveNav();
+    }
+  }
+}
+
+// ─── DORMANCE (forage sans progression) ───
+const DORMANT_THRESHOLD_DAYS = 30;
+
+function lastActivityDate(forage) {
+  let latest = new Date(forage.createdAt || Date.now());
+  STEPS.forEach(s => {
+    const st = forage.steps[s.id];
+    if (st.done && st.date) {
+      const d = new Date(st.date);
+      if (!isNaN(d) && d > latest) latest = d;
+    }
+  });
+  return latest;
+}
+
+function dormantDays(forage) {
+  if (forage.closed || forage.abandoned) return 0;
+  const diff = Date.now() - lastActivityDate(forage).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function nextPendingStep(forage) {
+  for (const s of STEPS) {
+    if (!forage.steps[s.id].done) return s;
+  }
+  return null;
+}
+
+function getDormantForages() {
+  const result = [];
+  state.projects.forEach(p => {
+    if (isProjectArchived(p)) return;
+    p.forages.forEach(f => {
+      const days = dormantDays(f);
+      if (days > DORMANT_THRESHOLD_DAYS) {
+        const next = nextPendingStep(f);
+        result.push({
+          projectId: p.id, forageId: f.id,
+          projet: p.name, code: f.code, localite: f.localite || '',
+          days, nextStep: next ? next.title : '—'
+        });
+      }
+    });
+  });
+  result.sort((a, b) => b.days - a.days);
+  return result;
+}
+
+// ─── EXPORT JSON (pour analyse / sauvegarde) ───
+function exportJSON() {
+  const data = {
+    app: 'SIYO Forages',
+    exportedAt: new Date().toISOString(),
+    nbProjects: state.projects.length,
+    projects: state.projects
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'siyo_forages_export_' + today() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Export JSON téléchargé', 'success');
+}
+
+// ─── VUE MATÉRIEL ───
+function movQtyLabel(m) {
+  const parts = [];
+  if (Number(m.pvc_plein) > 0) parts.push(m.pvc_plein + ' PVC plein');
+  if (Number(m.pvc_crepine) > 0) parts.push(m.pvc_crepine + ' PVC crépiné');
+  if (Number(m.gravier) > 0) parts.push(m.gravier + ' m³ gravier');
+  return parts.join(' · ') || '—';
+}
+
+function getMaterialRows() {
+  const rows = [];
+  state.projects.forEach(p => {
+    (p.forages || []).forEach(f => {
+      const ins = movementsIn(f.id);
+      if (ins.length === 0) return; // aucun matériel reçu → rien à suivre
+      const sin = sumMov(ins);
+      const fd = (f.steps.foration.data) || {};
+      const st = stockOfForage(f);
+      const pu = f.steps.foration.done ? (Number(fd.pvc_plein_used) || 0) : 0;
+      const cu = f.steps.foration.done ? (Number(fd.pvc_crepine_used) || 0) : 0;
+      
+      // 3 statuts matériel (basés sur le stock calculé du site) :
+      const forationEngaged = f.steps.foration.done;
+      let matStatus = 'attente';
+      if (f.steps.repli.done || (st.pp <= 0 && st.pc <= 0 && forationEngaged)) matStatus = 'replie';
+      else if (forationEngaged || f._abandonInProgress || f.abandoned) matStatus = 'replier';
+      
+      // Destinations des sorties (pour affichage/export)
+      const outs = movementsOut(f.id);
+      const destinations = [...new Set(outs.map(m => locDisplay(m.to)))].join(', ');
+      
+      rows.push({
+        projet: p.name,
+        code: f.code,
+        localite: f.localite || '',
+        pa: sin.pp, pu, pr: Math.max(0, st.pp),
+        ca: sin.pc, cu, cr: Math.max(0, st.pc),
+        g: sin.g,
+        stockNeg: (st.pp < 0 || st.pc < 0),
+        matStatus,
+        repliDate: f.steps.repli.date || '',
+        destination: destinations,
+        statutForage: f.abandoned ? 'Abandonné' : (f.closed ? 'Clôturé' : 'En cours')
+      });
+    });
+  });
+  // Ordre : à replier, puis en attente, puis replié
+  const order = { replier: 0, attente: 1, replie: 2 };
+  rows.sort((x, y) => order[x.matStatus] - order[y.matStatus]);
+  return rows;
+}
+
+function getMaterialToReplyCount() {
+  return getMaterialRows().filter(r => r.matStatus === 'replier').length;
+}
+
+function matStatusLabel(s) {
+  return s === 'replier' ? 'À replier' : (s === 'attente' ? 'En attente' : 'Replié');
+}
+
+function matStatusBadgeClass(s) {
+  return s === 'replier' ? 'pending' : (s === 'attente' ? 'attente' : 'done');
+}
+
+function renderMaterial() {
+  const rows = getMaterialRows();
+  const toReply = rows.filter(r => r.matStatus === 'replier');
+  const waiting = rows.filter(r => r.matStatus === 'attente');
+  const totPlein = toReply.reduce((s, r) => s + r.pr, 0);
+  const totCrep = toReply.reduce((s, r) => s + r.cr, 0);
+  const waitPlein = waiting.reduce((s, r) => s + r.pr, 0);
+  const waitCrep = waiting.reduce((s, r) => s + r.cr, 0);
+  
+  const list = document.getElementById('projectsList');
+  
+  if (rows.length === 0) {
+    list.innerHTML = `
+      <div class="empty">
+        <h3>Aucun matériel suivi</h3>
+        <p>Le matériel apparaît ici dès qu'un approvisionnement est renseigné sur un forage.</p>
+      </div>`;
+    return;
+  }
+  
+  list.innerHTML = `
+    <div class="material-view">
+      <div class="material-header">
+        <h2>Suivi du matériel</h2>
+        <div class="material-actions">
+          <button class="btn btn-sm" onclick="generateMaterialPDF(false)">📄 Télécharger PDF</button>
+          <button class="btn btn-sm btn-primary" onclick="generateMaterialPDF(true)">📤 Partager le rapport</button>
+        </div>
+      </div>
+      <div class="material-totals">
+        <div class="mat-total-card">
+          <div class="value">${toReply.length}</div>
+          <div class="label">Forages à replier</div>
+        </div>
+        <div class="mat-total-card">
+          <div class="value">${totPlein} + ${totCrep}</div>
+          <div class="label">PVC plein + crépiné à replier</div>
+        </div>
+        <div class="mat-total-card" style="background:#eff6ff;border-color:#bfdbfe;">
+          <div class="value">${waiting.length}</div>
+          <div class="label" style="color:#1d4ed8;">Forages en attente de foration</div>
+        </div>
+        <div class="mat-total-card" style="background:#eff6ff;border-color:#bfdbfe;">
+          <div class="value">${waitPlein} + ${waitCrep}</div>
+          <div class="label" style="color:#1d4ed8;">PVC sur site en attente</div>
+        </div>
+      </div>
+      <div class="material-table-wrap">
+        <table class="material-table">
+          <thead>
+            <tr>
+              <th>Projet</th>
+              <th>Forage</th>
+              <th>Localité</th>
+              <th class="num">PVC plein<br>Appro / Utilisé / Reste</th>
+              <th class="num">PVC crépiné<br>Appro / Utilisé / Reste</th>
+              <th class="num">Gravier (m³)</th>
+              <th>Statut matériel</th>
+              <th>Destination</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr class="${r.matStatus === 'replier' ? 'a-replier' : ''}">
+                <td>${escapeHtml(r.projet)}</td>
+                <td><strong>${escapeHtml(r.code)}</strong></td>
+                <td>${escapeHtml(r.localite)}</td>
+                <td class="num">${r.pa} / ${r.pu} / <strong>${r.pr}</strong></td>
+                <td class="num">${r.ca} / ${r.cu} / <strong>${r.cr}</strong></td>
+                <td class="num">${r.g}</td>
+                <td><span class="mat-badge ${matStatusBadgeClass(r.matStatus)}">${matStatusLabel(r.matStatus)}</span>${r.matStatus === 'replie' && r.repliDate ? `<br><span style="font-size:10px;color:var(--ink-faint)">${new Date(r.repliDate).toLocaleDateString('fr-FR')}</span>` : ''}</td>
+                <td>${escapeHtml(r.destination) || '<span style="color:var(--ink-faint)">—</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:11px;color:var(--ink-faint);margin-top:12px;font-style:italic;">
+        « En attente » = matériel approvisionné sur un forage pas encore foré (pas à replier, en attente d'utilisation). « À replier » = forage foré, matériel excédentaire à récupérer.
+      </p>
+      
+      <div class="material-header" style="margin-top:28px;">
+        <h2>Stocks par lieu</h2>
+      </div>
+      <div class="material-table-wrap">
+        <table class="material-table">
+          <thead>
+            <tr>
+              <th>Lieu</th>
+              <th class="num">PVC plein</th>
+              <th class="num">PVC crépiné</th>
+              <th class="num">Gravier (m³)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderStockRows()}
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="material-header" style="margin-top:28px;">
+        <h2>Registre des mouvements</h2>
+        <button class="btn btn-sm btn-primary" onclick="openMovementModal(null, null)">+ Nouveau mouvement</button>
+      </div>
+      ${state.movements.length === 0 ? '<p style="color:var(--ink-faint);font-size:13px;">Aucun mouvement enregistré.</p>' : `
+      <div class="material-table-wrap">
+        <table class="material-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Depuis</th>
+              <th>Vers</th>
+              <th class="num">PVC plein</th>
+              <th class="num">PVC crépiné</th>
+              <th class="num">Gravier</th>
+              <th>Responsable</th>
+              <th>Commentaire</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${[...state.movements].sort((a,b) => (b.date||'').localeCompare(a.date||'')).map(m => `
+              <tr>
+                <td style="font-family:var(--font-mono);font-size:11px;">${m.date ? new Date(m.date).toLocaleDateString('fr-FR') : '—'}</td>
+                <td>${escapeHtml(locDisplay(m.from))}</td>
+                <td>${escapeHtml(locDisplay(m.to))}</td>
+                <td class="num">${Number(m.pvc_plein) || ''}</td>
+                <td class="num">${Number(m.pvc_crepine) || ''}</td>
+                <td class="num">${Number(m.gravier) || ''}</td>
+                <td>${escapeHtml(m.responsable || '')}</td>
+                <td style="font-size:11px;color:var(--ink-soft);">${escapeHtml(m.commentaire || '')}</td>
+                <td><button class="mov-del" onclick="confirmDeleteMovement('${m.id}')" title="Supprimer">✕</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+function renderStockRows() {
+  const stocks = computeStocks();
+  const entries = Object.entries(stocks)
+    .filter(([k, v]) => Math.abs(v.pp) > 0.01 || Math.abs(v.pc) > 0.01 || Math.abs(v.g) > 0.01 || k === 'base')
+    .sort(([ka], [kb]) => (ka === 'base' ? -1 : kb === 'base' ? 1 : 0));
+  if (entries.length === 0) return '<tr><td colspan="4" style="color:var(--ink-faint);">Aucun stock suivi.</td></tr>';
+  return entries.map(([k, v]) => {
+    const neg = v.pp < 0 || v.pc < 0 || v.g < 0;
+    return `
+    <tr>
+      <td>${k === 'base' ? '<strong>🏠 Base SIYO</strong>' : escapeHtml(v.label)}${neg ? ' <span class="stock-neg">⚠ négatif : vérifier la saisie</span>' : ''}</td>
+      <td class="num ${v.pp < 0 ? 'stock-neg' : ''}">${v.pp}</td>
+      <td class="num ${v.pc < 0 ? 'stock-neg' : ''}">${v.pc}</td>
+      <td class="num ${v.g < 0 ? 'stock-neg' : ''}">${v.g}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function generateMaterialPDF(share) {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    toast('Librairie PDF non chargée. Vérifie la connexion internet et actualise.', 'error', 5000);
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const rows = getMaterialRows();
+  const toReply = rows.filter(r => r.matStatus === 'replier');
+  const waiting = rows.filter(r => r.matStatus === 'attente');
+  const totPlein = toReply.reduce((s, r) => s + r.pr, 0);
+  const totCrep = toReply.reduce((s, r) => s + r.cr, 0);
+  const dateStr = new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  
+  // En-tête
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('SIYO — Rapport de suivi du matériel forages', 14, 15);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Généré le ' + dateStr + '  ·  ' + toReply.length + ' forage(s) à replier (' + totPlein + ' PVC plein + ' + totCrep + ' PVC crépiné)  ·  ' + waiting.length + ' forage(s) avec matériel en attente de foration', 14, 22);
+  
+  const body = rows.map(r => [
+    r.projet,
+    r.code,
+    r.localite,
+    r.pa + ' / ' + r.pu + ' / ' + r.pr,
+    r.ca + ' / ' + r.cu + ' / ' + r.cr,
+    String(r.g),
+    r.matStatus === 'replier' ? 'À REPLIER' : (r.matStatus === 'attente' ? 'En attente foration' : 'Replié' + (r.repliDate ? ' le ' + new Date(r.repliDate).toLocaleDateString('fr-FR') : '')),
+    r.destination || '—'
+  ]);
+  
+  doc.autoTable({
+    head: [['Projet', 'Forage', 'Localité', 'PVC plein A/U/R', 'PVC crépiné A/U/R', 'Gravier (m³)', 'Statut matériel', 'Destination']],
+    body: body,
+    startY: 28,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [26, 26, 26], fontSize: 8 },
+    didParseCell: function(data) {
+      if (data.section === 'body' && rows[data.row.index]) {
+        const st = rows[data.row.index].matStatus;
+        if (st === 'replier') data.cell.styles.fillColor = [254, 243, 199];      // jaune : à replier
+        else if (st === 'attente') data.cell.styles.fillColor = [239, 246, 255]; // bleu clair : en attente
+      }
+    }
+  });
+  
+  // Tableau des stocks par lieu
+  const stocks = computeStocks();
+  const stockEntries = Object.entries(stocks)
+    .filter(([k, v]) => Math.abs(v.pp) > 0.01 || Math.abs(v.pc) > 0.01 || Math.abs(v.g) > 0.01 || k === 'base')
+    .sort(([ka], [kb]) => (ka === 'base' ? -1 : kb === 'base' ? 1 : 0));
+  const stockBody = stockEntries.map(([k, v]) => [
+    k === 'base' ? 'Base SIYO' : v.label,
+    String(v.pp), String(v.pc), String(v.g)
+  ]);
+  const yAfter = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 100;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(0);
+  doc.text('Stocks par lieu', 14, yAfter);
+  doc.autoTable({
+    head: [['Lieu', 'PVC plein', 'PVC crépiné', 'Gravier (m³)']],
+    body: stockBody,
+    startY: yAfter + 4,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [26, 26, 26], fontSize: 8 }
+  });
+  
+  doc.setFontSize(8);
+  doc.setTextColor(130);
+  doc.text('Document généré automatiquement par SIYO Forages — A/U/R = Approvisionné / Utilisé / Reste à replier', 14, doc.internal.pageSize.getHeight() - 8);
+  
+  const filename = 'SIYO_materiel_' + today() + '.pdf';
+  
+  if (share) {
+    try {
+      const blob = doc.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Rapport matériel SIYO' });
+        return;
+      }
+    } catch(e) {
+      if (e && e.name === 'AbortError') return; // l'utilisateur a annulé le partage
+      console.error('Share failed:', e);
+    }
+    // Fallback : téléchargement classique
+    doc.save(filename);
+    toast('Partage direct non disponible sur cet appareil — PDF téléchargé, envoie-le manuellement', 'default', 5000);
+  } else {
+    doc.save(filename);
+    toast('PDF téléchargé', 'success');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDU
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  // Compteurs (toutes vues)
+  const active = state.projects.filter(p => !isProjectArchived(p));
+  const archive = state.projects.filter(p => isProjectArchived(p));
+  document.getElementById('countActive').textContent = active.length;
+  document.getElementById('countArchive').textContent = archive.length;
+  document.getElementById('countMateriel').textContent = getMaterialToReplyCount();
+
+  const toolbar = document.getElementById('toolbar');
+
+  // ─── DISPATCH SELON LA VUE ───
+  if (state.currentView === 'dashboard') {
+    toolbar.style.display = 'none';
+    renderDashboard(active, archive);
+    return;
+  }
+  if (state.currentView === 'materiel') {
+    toolbar.style.display = 'none';
+    renderMaterial();
+    return;
+  }
+  if (state.currentView === 'active') {
+    ensureNavValid();
+    // La toolbar (recherche/filtres) n'est visible que sur l'écran 1 (tuiles projets)
+    toolbar.style.display = nav.screen === 'projects' ? 'flex' : 'none';
+    renderDrilldown(active);
+    return;
+  }
+  // ─── ARCHIVES : vue liste lecture seule ───
+  toolbar.style.display = 'flex';
+  updateFilterOptions();
+  const filtered = applyFilters(archive);
+  const list = document.getElementById('projectsList');
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="empty">
+        <h3>Aucun projet archivé</h3>
+        <p>Les projets dont tous les forages sont clôturés ou abandonnés apparaîtront ici.</p>
+      </div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(p => renderProject(p)).join('');
+  applyExpandedUI();
+}
+
+// ─── FILTRES (partagés archives + écran tuiles projets) ───
+function updateFilterOptions() {
+  const clients = [...new Set(state.projects.map(p => p.client).filter(Boolean))].sort();
+  const localites = [...new Set(
+    state.projects.flatMap(p => p.forages.map(f => f.localite).filter(Boolean))
+  )].sort();
+  const fc = document.getElementById('filterClient');
+  const fl = document.getElementById('filterLocalite');
+  const fcVal = fc.value, flVal = fl.value;
+  fc.innerHTML = '<option value="">Tous les clients</option>' + clients.map(c => `<option value="${escapeHtml(c)}" ${c===fcVal?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  fl.innerHTML = '<option value="">Toutes les localités</option>' + localites.map(l => `<option value="${escapeHtml(l)}" ${l===flVal?'selected':''}>${escapeHtml(l)}</option>`).join('');
+}
+
+function applyFilters(source) {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const filterClient = document.getElementById('filterClient').value;
+  const filterLocalite = document.getElementById('filterLocalite').value;
+  return source.filter(p => {
+    if (filterClient && p.client !== filterClient) return false;
+    if (filterLocalite && !p.forages.some(f => f.localite === filterLocalite)) return false;
+    if (!search) return true;
+    const forageHay = p.forages.map(f => (f.code || '') + ' ' + (f.localite || '')).join(' ');
+    const hay = (p.name + ' ' + p.client + ' ' + (p.zone || '') + ' ' + (p.description || '') + ' ' + forageHay).toLowerCase();
+    return hay.includes(search);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRILL-DOWN : PROJETS ACTIFS (écran 1 : projets, 2 : forages, 3 : phases)
+// ═══════════════════════════════════════════════════════════════
+function renderDrilldown(activeProjects) {
+  const list = document.getElementById('projectsList');
+  
+  if (nav.screen === 'projects') {
+    updateFilterOptions();
+    const filtered = applyFilters(activeProjects);
+    if (activeProjects.length === 0) {
+      list.innerHTML = `
+        <div class="empty">
+          <h3>Aucun projet actif</h3>
+          <p>Crée ton premier projet de forage pour commencer.</p>
+          <button class="btn btn-primary" onclick="openNewProject()">+ Nouveau projet</button>
+        </div>`;
+      return;
+    }
+    list.innerHTML = `
+      <div class="tile-grid">
+        ${filtered.map(p => renderProjectTile(p)).join('')}
+        <div class="tile tile-add" onclick="openNewProject()">+ Nouveau projet</div>
+      </div>`;
+    return;
+  }
+  
+  const p = state.projects.find(x => x.id === nav.projectId);
+  if (!p) { nav.screen = 'projects'; saveNav(); renderDrilldown(activeProjects); return; }
+  
+  if (nav.screen === 'forages') {
+    const prog = projectProgress(p);
+    const pct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+    list.innerHTML = `
+      <div class="screen-header">
+        <button class="back-btn" onclick="navTo('projects', null, null)">‹ Projets</button>
+        <div class="breadcrumb">
+          <span class="crumb-current">${escapeHtml(p.name)}</span>
+          <button class="edit-btn" onclick="openEditProject('${p.id}', event)" title="Modifier le projet">✎</button>
+        </div>
+      </div>
+      <div class="screen-meta">
+        <span><span class="label">Client</span> ${escapeHtml(p.client)}</span>
+        ${p.zone ? `<span><span class="label">Zone</span> ${escapeHtml(p.zone)}</span>` : ''}
+        <span><span class="label">Avancement</span> ${prog.done}/${prog.total} · ${pct}%</span>
+        ${p.description ? `<span style="flex-basis:100%;font-style:italic;">${escapeHtml(p.description)}</span>` : ''}
+      </div>
+      <div class="tile-grid">
+        ${p.forages.filter(f => !f.closed && !f.abandoned).map(f => renderForageTile(p.id, f)).join('')}
+        <div class="tile tile-add" onclick="openNewForage('${p.id}')">+ Ajouter un forage</div>
+      </div>
+      ${isProjectVierge(p) ? `
+        <div style="margin-top:20px;text-align:right;">
+          <button class="btn btn-sm btn-danger" onclick="confirmDeleteProject('${p.id}')">Supprimer le projet (vide)</button>
+        </div>` : ''}
+      ${p.forages.some(f => f.closed || f.abandoned) ? `
+        <p style="font-size:12px;color:var(--ink-faint);margin-top:16px;font-style:italic;">
+          ${p.forages.filter(f => f.closed || f.abandoned).length} forage(s) terminé(s) de ce projet — visible(s) dans l'onglet Archives une fois le projet entièrement clôturé.
+        </p>` : ''}`;
+    return;
+  }
+  
+  // Écran 3 : le forage avec ses phases
+  const f = p.forages.find(x => x.id === nav.forageId);
+  if (!f) { nav.screen = 'forages'; saveNav(); renderDrilldown(activeProjects); return; }
+  
+  list.innerHTML = `
+    <div class="screen-header">
+      <button class="back-btn" onclick="navTo('forages', '${p.id}', null)">‹ ${escapeHtml(p.name.length > 22 ? p.name.slice(0,20)+'…' : p.name)}</button>
+      <div class="breadcrumb">
+        <span class="crumb-current">${escapeHtml(f.code)}${f.localite ? ' — ' + escapeHtml(f.localite) : ''}</span>
+        <button class="edit-btn" onclick="openEditForage('${p.id}','${f.id}', event)" title="Modifier le forage">✎</button>
+      </div>
+    </div>
+    ${renderForageDetail(p.id, f)}`;
+  applyExpandedUI();
+}
+
+function renderProjectTile(p) {
+  const prog = projectProgress(p);
+  const pct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+  const dormants = p.forages.filter(f => dormantDays(f) > DORMANT_THRESHOLD_DAYS).length;
+  const uniqueLocalites = [...new Set(p.forages.map(f => f.localite).filter(Boolean))];
+  const locDisplay = uniqueLocalites.length === 0 ? '—' :
+                     uniqueLocalites.length <= 2 ? uniqueLocalites.join(', ') :
+                     `${uniqueLocalites.slice(0,2).join(', ')} +${uniqueLocalites.length - 2}`;
+  return `
+    <div class="tile" onclick="navTo('forages', '${p.id}', null)">
+      <div class="tile-title">
+        <span>${escapeHtml(p.name)}</span>
+        ${dormants > 0 ? `<span class="tile-badge-dormant">⏱ ${dormants}</span>` : ''}
+      </div>
+      <div class="tile-sub">
+        <span><span class="label">Client</span>${escapeHtml(p.client)}</span>
+        <span><span class="label">Localités</span>${escapeHtml(locDisplay)}</span>
+      </div>
+      <div class="tile-footer">
+        <span>${prog.forages} forage${prog.forages > 1 ? 's' : ''}</span>
+        <span class="tile-pct">${pct}%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${pct === 100 ? 'complete' : ''}" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+function renderForageTile(projectId, f) {
+  const prog = forageProgress(f);
+  const pct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+  const days = dormantDays(f);
+  const next = nextPendingStep(f);
+  const inAbandon = f._abandonInProgress && !f.abandoned;
+  return `
+    <div class="tile" onclick="navTo('forage', '${projectId}', '${f.id}')">
+      <div class="tile-title">
+        <span>${escapeHtml(f.code)}</span>
+        ${days > DORMANT_THRESHOLD_DAYS ? `<span class="tile-badge-dormant">⏱ ${days}j</span>` : ''}
+      </div>
+      <div class="tile-sub">
+        <span>${escapeHtml(f.localite || '—')}</span>
+        <span><span class="label">Prochaine étape</span>${inAbandon ? 'Repli (abandon en cours)' : (next ? escapeHtml(next.title) : 'Clôture')}</span>
+      </div>
+      <div class="tile-footer">
+        <span>${prog.done}/${prog.total} étapes</span>
+        <span class="tile-pct">${pct}%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${pct === 100 ? 'complete' : ''}" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TABLEAU DE BORD
+// ═══════════════════════════════════════════════════════════════
+function renderDashboard(activeProjects, archiveProjects) {
+  const list = document.getElementById('projectsList');
+  
+  // KPI
+  let enCours = 0, clotures = 0, abandons = 0, metrage = 0;
+  const stepCounts = {};
+  STEPS.forEach(s => stepCounts[s.id] = 0);
+  let totalForages = 0;
+  
+  state.projects.forEach(p => {
+    p.forages.forEach(f => {
+      totalForages++;
+      if (f.abandoned) abandons++;
+      else if (f.closed) clotures++;
+      else enCours++;
+      STEPS.forEach(s => { if (f.steps[s.id].done) stepCounts[s.id]++; });
+      if (f.steps.foration.done) {
+        metrage += Number((f.steps.foration.data || {}).profondeur_reelle) || 0;
+      }
+    });
+  });
+  
+  const dormants = getDormantForages();
+  const matRows = getMaterialRows();
+  const toReply = matRows.filter(r => r.matStatus === 'replier');
+  const waiting = matRows.filter(r => r.matStatus === 'attente');
+  const totPleinReply = toReply.reduce((s, r) => s + r.pr, 0);
+  const totCrepReply = toReply.reduce((s, r) => s + r.cr, 0);
+  const totPleinWait = waiting.reduce((s, r) => s + r.pr, 0);
+  const totCrepWait = waiting.reduce((s, r) => s + r.cr, 0);
+  
+  list.innerHTML = `
+    <div class="dash-grid">
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="value">${enCours}</div>
+          <div class="label">Forages en cours</div>
+        </div>
+        <div class="kpi-card">
+          <div class="value">${clotures}</div>
+          <div class="label">Clôturés</div>
+        </div>
+        <div class="kpi-card ${abandons > 0 ? 'warn' : ''}">
+          <div class="value">${abandons}</div>
+          <div class="label">Abandonnés</div>
+        </div>
+        <div class="kpi-card">
+          <div class="value">${Math.round(metrage)}</div>
+          <div class="label">Métrage foré (ml)</div>
+        </div>
+      </div>
+      
+      ${dormants.length > 0 ? `
+      <div class="dash-section">
+        <h3>⏱ Forages sans progression depuis +${DORMANT_THRESHOLD_DAYS} jours (${dormants.length})</h3>
+        ${dormants.map(d => `
+          <div class="dormant-item" onclick="goToForage('${d.projectId}','${d.forageId}')">
+            <span class="dormant-days">${d.days}j</span>
+            <div class="dormant-info">
+              <div><strong>${escapeHtml(d.code)}</strong> · ${escapeHtml(d.localite)}</div>
+              <div class="sub">${escapeHtml(d.projet)}</div>
+            </div>
+            <span class="dormant-stage">Bloqué : ${escapeHtml(d.nextStep)}</span>
+          </div>`).join('')}
+      </div>` : ''}
+      
+      <div class="dash-section">
+        <h3>Entonnoir des étapes (${totalForages} forages)</h3>
+        ${STEPS.map(s => {
+          const count = stepCounts[s.id];
+          const pctBar = totalForages > 0 ? Math.round((count / totalForages) * 100) : 0;
+          return `
+          <div class="funnel-row">
+            <span>${escapeHtml(s.title.length > 18 ? s.title.slice(0,16)+'…' : s.title)}</span>
+            <div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:${pctBar}%"></div></div>
+            <span class="funnel-count">${count}/${totalForages}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      
+      <div class="dash-section">
+        <h3>Matériel <button class="btn btn-sm" style="float:right" onclick="switchView('materiel')">Voir le détail →</button></h3>
+        <div class="mat-summary-row">
+          <div class="mat-summary-card replier">
+            <div class="value">${toReply.length}</div>
+            <div class="label">Forages à replier</div>
+          </div>
+          <div class="mat-summary-card replier">
+            <div class="value">${totPleinReply} + ${totCrepReply}</div>
+            <div class="label">PVC à replier (plein + crépiné)</div>
+          </div>
+          <div class="mat-summary-card attente">
+            <div class="value">${waiting.length}</div>
+            <div class="label">Forages en attente de foration</div>
+          </div>
+          <div class="mat-summary-card attente">
+            <div class="value">${totPleinWait} + ${totCrepWait}</div>
+            <div class="label">PVC sur site en attente</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="dash-section">
+        <h3>Avancement par projet actif</h3>
+        ${activeProjects.length === 0 ? '<p style="color:var(--ink-faint);font-size:13px;">Aucun projet actif.</p>' : activeProjects.map(p => {
+          const prog = projectProgress(p);
+          const pct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+          return `
+          <div class="proj-progress-row">
+            <span class="name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+            <div class="funnel-bar-track"><div class="funnel-bar-fill ${pct === 100 ? 'complete' : ''}" style="width:${pct}%;${pct===100?'background:var(--ok);':''}"></div></div>
+            <span class="pct">${pct}%</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function goToForage(projectId, forageId) {
+  state.currentView = 'active';
+  try { localStorage.setItem('siyo_forages_view_v1', 'active'); } catch(e) {}
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'active'));
+  navTo('forage', projectId, forageId);
+}
+
+function renderProject(project) {
+  const prog = projectProgress(project);
+  const isArchive = isProjectArchived(project);
+  const pct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+  // Localités uniques des forages
+  const uniqueLocalites = [...new Set(project.forages.map(f => f.localite).filter(Boolean))];
+  const localitesDisplay = uniqueLocalites.length === 0 ? 'Aucun forage' :
+                           uniqueLocalites.length === 1 ? uniqueLocalites[0] :
+                           uniqueLocalites.length <= 3 ? uniqueLocalites.join(', ') :
+                           `${uniqueLocalites.slice(0,2).join(', ')} +${uniqueLocalites.length - 2}`;
+  return `
+    <div class="project ${isArchive ? 'archive-project' : ''}" data-project-id="${project.id}">
+      <div class="project-header" onclick="toggleProject('${project.id}')">
+        <div class="project-info">
+          <h2>${escapeHtml(project.name)}${!isArchive ? ` <button class="edit-btn" onclick="openEditProject('${project.id}', event)" title="Modifier le projet">✎</button>` : ''}</h2>
+          <div class="project-meta">
+            <span><span class="label">Client</span> ${escapeHtml(project.client)}</span>
+            ${project.zone ? `<span><span class="label">Zone</span> ${escapeHtml(project.zone)}</span>` : ''}
+            <span><span class="label">Localités</span> ${escapeHtml(localitesDisplay)}</span>
+            <span><span class="label">Créé</span> ${new Date(project.createdAt).toLocaleDateString('fr-FR')}</span>
+          </div>
+          ${project.description ? `<div class="project-description">${escapeHtml(project.description)}</div>` : ''}
+        </div>
+        <div class="project-progress">
+          <div class="progress-stat">${prog.done}/${prog.total}</div>
+          <div class="progress-label">${prog.forages} forage${prog.forages > 1 ? 's' : ''} · ${pct}%</div>
+        </div>
+        <button class="expand-toggle" onclick="event.stopPropagation();toggleProject('${project.id}')">▸</button>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${pct === 100 ? 'complete' : ''}" style="width:${pct}%"></div></div>
+      <div class="project-body">
+        <div class="forages-list">
+          ${project.forages.map(f => renderForage(project.id, f)).join('')}
+          ${!isArchive ? `
+            <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;padding:8px 4px;flex-wrap:wrap;">
+              <button class="btn btn-sm" onclick="openNewForage('${project.id}')">+ Ajouter un forage</button>
+              ${isProjectVierge(project) ? `<button class="btn btn-sm btn-danger" onclick="confirmDeleteProject('${project.id}')" title="Supprimer (projet sans forage)">Supprimer le projet</button>` : ''}
+            </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderForage(projectId, forage) {
+  const prog = forageProgress(forage);
+  const canClose = canCloseForage(forage);
+  const isVierge = isForageVierge(forage);
+  const canAbandon = canAbandonForage(forage);
+  const isFinished = forage.closed || forage.abandoned; // dans archives
+  const inAbandonProgress = forage._abandonInProgress && !forage.abandoned;
+  const fpct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+  
+  // Statut visuel
+  let statusClass = 'status-active';
+  let statusLabel = prog.done + '/' + prog.total + ' · ' + fpct + '%';
+  if (forage.abandoned) {
+    statusClass = 'status-abandoned';
+    statusLabel = 'Abandonné';
+  } else if (forage.closed) {
+    statusClass = 'status-closed';
+    statusLabel = 'Clôturé';
+  } else if (inAbandonProgress) {
+    statusClass = 'status-abandoning';
+    statusLabel = 'Abandon en cours';
+  }
+  
+  return `
+    <div class="forage ${forage.closed ? 'closed' : ''} ${forage.abandoned ? 'abandoned' : ''} ${inAbandonProgress ? 'abandoning' : ''}" data-forage-id="${forage.id}">
+      <div class="forage-header" onclick="toggleForage('${forage.id}')">
+        <span class="forage-code">${escapeHtml(forage.code)}</span>
+        ${forage.localite ? `<span class="forage-localite">${escapeHtml(forage.localite)}</span>` : ''}
+        ${forage.gps ? `<span class="forage-gps">📍 ${escapeHtml(forage.gps)}</span>` : ''}
+        ${!isFinished ? `<button class="edit-btn" onclick="openEditForage('${projectId}','${forage.id}', event)" title="Modifier le forage">✎</button>` : ''}
+        <div class="forage-status">
+          <div class="steps-timeline">
+            ${STEPS.map(s => {
+              const done = forage.steps[s.id].done;
+              const avail = isStepAvailable(forage, s.id);
+              const cls = done ? 'done' : (avail ? 'available' : 'locked');
+              return `<div class="step-dot ${cls}" title="${escapeHtml(s.title)}"></div>`;
+            }).join('')}
+          </div>
+          <span class="status-pill ${statusClass}">${statusLabel}</span>
+        </div>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${forage.abandoned ? 'aborted' : (fpct === 100 ? 'complete' : '')}" style="width:${fpct}%"></div></div>
+      <div class="forage-body">
+        ${forage.abandoned ? `
+          <div class="abandon-banner">
+            <div class="abandon-banner-title">⚠ Forage abandonné</div>
+            <div class="abandon-banner-content">
+              <div><span class="label">Motif</span> ${escapeHtml(forage.abandonReason || '—')}</div>
+              <div><span class="label">Date</span> ${forage.abandonDate ? new Date(forage.abandonDate).toLocaleDateString('fr-FR') : '—'}</div>
+              ${forage.abandonResponsable ? `<div><span class="label">Décidé par</span> ${escapeHtml(forage.abandonResponsable)}</div>` : ''}
+            </div>
+          </div>
+        ` : ''}
+        ${inAbandonProgress ? `
+          <div class="abandon-banner abandon-pending">
+            <div class="abandon-banner-title">⏳ Abandon en cours — Repli du matériel requis</div>
+            <div class="abandon-banner-content">
+              <div><span class="label">Motif</span> ${escapeHtml(forage.abandonReason || '—')}</div>
+              <div style="margin-top:8px;font-style:italic;">Renseigne et valide l'étape <strong>Repli du matériel</strong> ci-dessous pour finaliser l'abandon et archiver le forage.</div>
+            </div>
+          </div>
+        ` : ''}
+        <div class="steps-grid">
+          ${STEPS.map(step => renderStep(projectId, forage, step)).join('')}
+        </div>
+        ${!isFinished ? `
+          <div class="forage-close-zone">
+            <div class="info">
+              ${inAbandonProgress 
+                ? 'Valide l\'étape Repli du matériel ci-dessus pour finaliser l\'abandon.'
+                : (canClose 
+                  ? 'Toutes les étapes sont validées. Tu peux clôturer ce forage.' 
+                  : `${prog.total - prog.done} étape(s) restante(s) avant clôture.`)}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${isVierge ? `<button class="btn btn-sm btn-danger" onclick="confirmDeleteForage('${projectId}','${forage.id}')" title="Supprimer (forage sans données)">Supprimer</button>` : ''}
+              ${canAbandon && !inAbandonProgress ? `<button class="btn btn-sm btn-warn" onclick="openAbandonModal('${projectId}','${forage.id}')">Abandonner</button>` : ''}
+              ${!inAbandonProgress ? `<button class="btn btn-sm ${canClose ? 'btn-accent' : ''}" ${canClose ? '' : 'disabled'} onclick="confirmCloseForage('${projectId}','${forage.id}')">
+                Clôturer le forage
+              </button>` : ''}
+            </div>
+          </div>` : `
+          <div class="forage-close-zone">
+            <div class="info">
+              ${forage.abandoned 
+                ? `Abandonné le ${new Date(forage.closedAt).toLocaleDateString('fr-FR')}` 
+                : `Clôturé le ${new Date(forage.closedAt).toLocaleDateString('fr-FR')}`}
+            </div>
+            <button class="btn btn-sm" onclick="reopenForage('${projectId}','${forage.id}')">Réactiver</button>
+          </div>`}
+      </div>
+    </div>`;
+}
+
+/**
+ * Corps détaillé d'un forage (écran 3 du drill-down) : bannières + phases + zone d'actions.
+ */
+function renderForageDetail(projectId, forage) {
+  const prog = forageProgress(forage);
+  const canClose = canCloseForage(forage);
+  const isVierge = isForageVierge(forage);
+  const canAbandon = canAbandonForage(forage);
+  const isFinished = forage.closed || forage.abandoned;
+  const inAbandonProgress = forage._abandonInProgress && !forage.abandoned;
+  const fpct = prog.total > 0 ? Math.round((prog.done / prog.total) * 100) : 0;
+  
+  return `
+    <div class="forage expanded" data-forage-id="${forage.id}" style="border:none;background:transparent;">
+      <div class="progress-track" style="border-radius:5px;margin-bottom:16px;"><div class="progress-fill ${fpct === 100 ? 'complete' : ''}" style="width:${fpct}%"></div></div>
+      <div class="forage-body" style="display:block;padding:0;border:none;background:transparent;">
+        ${inAbandonProgress ? `
+          <div class="abandon-banner abandon-pending">
+            <div class="abandon-banner-title">⏳ Abandon en cours — Repli du matériel requis</div>
+            <div class="abandon-banner-content">
+              <div><span class="label">Motif</span> ${escapeHtml(forage.abandonReason || '—')}</div>
+              <div style="margin-top:8px;font-style:italic;">Renseigne et valide l'étape <strong>Repli du matériel</strong> ci-dessous pour finaliser l'abandon et archiver le forage.</div>
+            </div>
+          </div>
+        ` : ''}
+        <div class="steps-grid">
+          ${STEPS.map(step => renderStep(projectId, forage, step)).join('')}
+        </div>
+        ${!isFinished ? `
+          <div class="forage-close-zone" style="border-radius:10px;margin-top:16px;">
+            <div class="info">
+              ${inAbandonProgress 
+                ? 'Valide l\'étape Repli du matériel ci-dessus pour finaliser l\'abandon.'
+                : (canClose 
+                  ? 'Toutes les étapes sont validées. Tu peux clôturer ce forage.' 
+                  : `${prog.total - prog.done} étape(s) restante(s) avant clôture.`)}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${isVierge ? `<button class="btn btn-sm btn-danger" onclick="confirmDeleteForage('${projectId}','${forage.id}')" title="Supprimer (forage sans données)">Supprimer</button>` : ''}
+              ${canAbandon && !inAbandonProgress ? `<button class="btn btn-sm btn-warn" onclick="openAbandonModal('${projectId}','${forage.id}')">Abandonner</button>` : ''}
+              ${!inAbandonProgress ? `<button class="btn btn-sm ${canClose ? 'btn-accent' : ''}" ${canClose ? '' : 'disabled'} onclick="confirmCloseForage('${projectId}','${forage.id}')">
+                Clôturer le forage
+              </button>` : ''}
+            </div>
+          </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderStep(projectId, forage, step) {
+  const s = forage.steps[step.id];
+  const available = isStepAvailable(forage, step.id);
+  const locked = !available;
+  const readOnly = forage.closed || forage.abandoned; // archives : lecture seule
+  const cls = (s.done ? 'done' : '') + ' ' + (locked ? 'locked' : '');
+  return `
+    <div class="step ${cls}" data-step-key="${forage.id}_${step.id}" onclick="toggleStepExpand('${forage.id}','${step.id}', event)">
+      <div class="step-header">
+        <div class="step-num">${step.num}</div>
+        <div class="step-title">${escapeHtml(step.title)}</div>
+        ${s.date ? `<div class="step-date">${new Date(s.date).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'})}</div>` : ''}
+        <div class="step-check" ${readOnly ? 'style="cursor:default;"' : `onclick="toggleStep('${projectId}','${forage.id}','${step.id}', event)"`}>${s.done ? '✓' : ''}</div>
+      </div>
+      ${!locked ? `<div class="step-form">${renderStepForm(projectId, forage, step, readOnly)}</div>` : ''}
+    </div>`;
+}
+
+function renderStepForm(projectId, forage, step, readOnly) {
+  const dis = readOnly ? ' disabled' : '';
+  const s = forage.steps[step.id];
+  const fields = FIELDS_BY_STEP[step.id] || [];
+  let extra = '';
+
+  // ─── APPRO : liste des entrées de matériel (registre) ───
+  if (step.id === 'approvisionnement') {
+    const ins = movementsIn(forage.id);
+    const sin = sumMov(ins);
+    extra = `
+      <div class="form-field full-width">
+        <label>Matériel reçu sur ce site (total : ${sin.pp} PVC plein · ${sin.pc} PVC crépiné · ${sin.g} m³ gravier)</label>
+        ${ins.length === 0 ? '<span class="hint">Aucune entrée enregistrée. Ajoute chaque livraison ou transfert reçu.</span>' : `
+        <div class="mov-list">
+          ${ins.map(m => `
+            <div class="mov-item">
+              <span class="mov-date">${m.date ? new Date(m.date).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'}</span>
+              <span class="mov-route">${escapeHtml(locDisplay(m.from))} →</span>
+              <span class="mov-qty">${movQtyLabel(m)}</span>
+              ${!readOnly ? `<button class="mov-del" onclick="event.stopPropagation();confirmDeleteMovement('${m.id}')" title="Supprimer">✕</button>` : ''}
+            </div>`).join('')}
+        </div>`}
+        ${!readOnly ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="event.stopPropagation();openMovementModal('achat', 'forage:${forage.id}')">+ Entrée de matériel (achat ou transfert)</button>` : ''}
+      </div>`;
+  }
+
+  // ─── REPLI : stock restant + sorties (registre) ───
+  if (step.id === 'repli') {
+    const st = stockOfForage(forage);
+    const outs = movementsOut(forage.id);
+    const soldé = st.pp <= 0 && st.pc <= 0;
+    extra = `
+      <div class="form-field full-width">
+        <label>Stock restant sur site : <span style="color:${soldé ? 'var(--ok)' : 'var(--warn)'};font-weight:700;">${Math.max(0,st.pp)} PVC plein · ${Math.max(0,st.pc)} PVC crépiné</span></label>
+        ${(st.pp < 0 || st.pc < 0) ? '<span class="alert">⚠ Stock négatif détecté : vérifie les quantités saisies (entrées, utilisations, sorties)</span>' : ''}
+        ${outs.length === 0 ? '<span class="hint">Aucune sortie enregistrée. Transfère le matériel restant vers la base, un autre forage, ou enregistre une perte/casse (destination "Autre lieu").</span>' : `
+        <div class="mov-list">
+          ${outs.map(m => `
+            <div class="mov-item">
+              <span class="mov-date">${m.date ? new Date(m.date).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'}</span>
+              <span class="mov-route">→ ${escapeHtml(locDisplay(m.to))}</span>
+              <span class="mov-qty">${movQtyLabel(m)}</span>
+              ${!readOnly ? `<button class="mov-del" onclick="event.stopPropagation();confirmDeleteMovement('${m.id}')" title="Supprimer">✕</button>` : ''}
+            </div>`).join('')}
+        </div>`}
+        ${!readOnly ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="event.stopPropagation();openMovementModal('forage:${forage.id}', 'base')">+ Transfert sortant (repli)</button>` : ''}
+        <span class="hint">L'étape se valide quand le stock du site est soldé (tout transféré ou perte enregistrée).</span>
+      </div>`;
+  }
+
+  // Champs spécifiques à l'étape
+  const fieldsHtml = fields.map(f => {
+    const val = s.data[f.key] !== undefined ? s.data[f.key] : '';
+    let alert = '';
+    if (f.validateApprov) {
+      const sin = sumMovementsIn(forage.id);
+      const approVal = f.validateApprov === 'pvc_plein_qty' ? sin.pp : sin.pc;
+      const usedVal = Number(val) || 0;
+      if (usedVal > approVal && approVal > 0) {
+        alert = `<span class="alert">⚠ Dépasse le matériel reçu sur site (${approVal})</span>`;
+      }
+    }
+    const requiredMark = f.required ? ' <span class="required-mark">*</span>' : '';
+    const placeholder = f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : '';
+    const stepAttr = f.type === 'number' ? ' step="0.01"' : '';
+    return `
+      <div class="form-field">
+        <label>${escapeHtml(f.label)}${requiredMark}</label>
+        <input type="${f.type}"${stepAttr} value="${escapeHtml(val)}"${placeholder}
+               onchange="updateStepField('${projectId}','${forage.id}','${step.id}','${f.key}', this.value)"
+               onclick="event.stopPropagation()"${dis}>
+        ${alert}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="form-grid">
+      ${fieldsHtml}
+      ${extra}
+      <div class="form-field">
+        <label>Date de réalisation</label>
+        <input type="date" value="${s.date}" 
+               onchange="updateStepField('${projectId}','${forage.id}','${step.id}','date', this.value)"
+               onclick="event.stopPropagation()"${dis}>
+      </div>
+      <div class="form-field">
+        <label>Responsable</label>
+        <input type="text" value="${escapeHtml(s.responsable)}" placeholder="Nom de la personne"
+               onchange="updateStepField('${projectId}','${forage.id}','${step.id}','responsable', this.value)"
+               onclick="event.stopPropagation()"${dis}>
+      </div>
+      <div class="form-field full-width">
+        <label>Commentaire</label>
+        <textarea placeholder="Observations, incidents, précisions techniques..."
+                  onchange="updateStepField('${projectId}','${forage.id}','${step.id}','commentaire', this.value)"
+                  onclick="event.stopPropagation()"${dis}>${escapeHtml(s.commentaire)}</textarea>
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INITIALISATION
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  setSyncStatus('', 'Initialisation...');
+  
+  // 0. Restaure la navigation et la vue mémorisées (on rouvre là où on était)
+  loadExpandedUI();
+  loadNav();
+  try {
+    const savedView = localStorage.getItem('siyo_forages_view_v1');
+    if (savedView && ['dashboard','active','materiel','archive'].includes(savedView)) {
+      state.currentView = savedView;
+    }
+  } catch(e) {}
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === state.currentView));
+  
+  // 1. Affiche immédiatement le cache local pour ne pas avoir d'écran vide
+  loadLocalCache();
+  
+  if (!isUrlConfigured()) {
+    document.getElementById('configBanner').style.display = 'flex';
+    setSyncStatus('error', 'URL non configurée');
+    migrateToLedger();
+    render();
+    return;
+  }
+  
+  setSyncStatus('syncing', 'Chargement initial...');
+  render();
+  
+  // 2. Charge depuis Google Sheets (source de vérité)
+  const loaded = await loadFromSheet();
+  if (loaded) render();
+}
+
+// ─── ERGONOMIE MOBILE : scroll auto quand le clavier masque le champ ───
+document.addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (!t || !t.matches) return;
+  if (t.matches('input[type="text"], input[type="number"], input[type="date"], textarea')) {
+    // Délai le temps que le clavier virtuel s'ouvre, puis recentre le champ
+    setTimeout(() => {
+      try { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(err) {}
+    }, 350);
+  }
+});
+
+init();
+</script>
+</body>
+</html>
