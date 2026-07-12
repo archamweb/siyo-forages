@@ -1350,6 +1350,12 @@
 
   .stock-neg { color: var(--err); font-weight: 700; }
 
+  .reste-alert {
+    color: var(--err);
+    font-weight: 800;
+    font-size: 13px;
+  }
+
   /* ─── VUE MATÉRIEL ─── */
   .material-view {
     background: var(--bg-elev);
@@ -3217,8 +3223,8 @@ function renderMaterial() {
                 <td>${escapeHtml(r.projet)}</td>
                 <td><strong>${escapeHtml(r.code)}</strong></td>
                 <td>${escapeHtml(r.localite)}</td>
-                <td class="num">${r.pa} / ${r.pu} / <strong>${r.pr}</strong></td>
-                <td class="num">${r.ca} / ${r.cu} / <strong>${r.cr}</strong></td>
+                <td class="num">${r.pa} / ${r.pu} / <strong class="${r.matStatus === 'replier' && r.pr > 0 ? 'reste-alert' : ''}">${r.pr}</strong></td>
+                <td class="num">${r.ca} / ${r.cu} / <strong class="${r.matStatus === 'replier' && r.cr > 0 ? 'reste-alert' : ''}">${r.cr}</strong></td>
                 <td class="num">${r.g}</td>
                 <td><span class="mat-badge ${matStatusBadgeClass(r.matStatus)}">${matStatusLabel(r.matStatus)}</span>${r.matStatus === 'replie' && r.repliDate ? `<br><span style="font-size:10px;color:var(--ink-faint)">${new Date(r.repliDate).toLocaleDateString('fr-FR')}</span>` : ''}</td>
                 <td>${escapeHtml(r.destination) || '<span style="color:var(--ink-faint)">—</span>'}</td>
@@ -3313,48 +3319,117 @@ async function generateMaterialPDF(share) {
   }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  
+  // Palette de l'application
+  const BG = [245, 242, 236];       // crème
+  const INK = [26, 26, 26];
+  const INK_SOFT = [90, 86, 79];
+  const INK_FAINT = [138, 133, 124];
+  const ACCENT = [194, 65, 12];     // orange SIYO
+  const ERR = [185, 28, 28];        // rouge
+  const WARN_SOFT = [254, 243, 199]; // jaune clair
+  const WARN_BORDER = [252, 211, 77];
+  const WARN_TXT = [180, 83, 9];
+  const BLUE_SOFT = [239, 246, 255];
+  const BLUE_BORDER = [191, 219, 254];
+  const BLUE_TXT = [29, 78, 216];
+  
+  const paintBg = () => { doc.setFillColor(BG[0], BG[1], BG[2]); doc.rect(0, 0, W, H, 'F'); };
+  paintBg();
+  
   const rows = getMaterialRows();
   const toReply = rows.filter(r => r.matStatus === 'replier');
   const waiting = rows.filter(r => r.matStatus === 'attente');
   const totPlein = toReply.reduce((s, r) => s + r.pr, 0);
   const totCrep = toReply.reduce((s, r) => s + r.cr, 0);
+  const waitPlein = waiting.reduce((s, r) => s + r.pr, 0);
+  const waitCrep = waiting.reduce((s, r) => s + r.cr, 0);
   const dateStr = new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'numeric'});
   
-  // En-tête
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('SIYO — Rapport de suivi du matériel forages', 14, 15);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text('Généré le ' + dateStr + '  ·  ' + toReply.length + ' forage(s) à replier (' + totPlein + ' PVC plein + ' + totCrep + ' PVC crépiné)  ·  ' + waiting.length + ' forage(s) avec matériel en attente de foration', 14, 22);
+  // ─── En-tête façon appli ───
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text('SIYO', 14, 17);
+  const wSIYO = doc.getTextWidth('SIYO ');
+  doc.setFont('helvetica', 'bolditalic'); doc.setTextColor(ACCENT[0], ACCENT[1], ACCENT[2]);
+  doc.text('Forages', 14 + wSIYO, 17);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(INK_FAINT[0], INK_FAINT[1], INK_FAINT[2]);
+  doc.text('S U I V I   D E S   A C T I V I T É S   ·   C Ô T E   D \' I V O I R E', 14, 22.5);
+  doc.setDrawColor(216, 210, 196);
+  doc.line(14, 26, W - 14, 26);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(INK[0], INK[1], INK[2]);
+  doc.text('Suivi du matériel', 14, 33.5);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(INK_SOFT[0], INK_SOFT[1], INK_SOFT[2]);
+  doc.text('Généré le ' + dateStr, W - 14, 33.5, { align: 'right' });
   
+  // ─── Cartes de totaux façon appli ───
+  function kpiCard(x, y, w, h, value, label, fill, border, valColor, labColor) {
+    doc.setFillColor(fill[0], fill[1], fill[2]);
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.roundedRect(x, y, w, h, 2.5, 2.5, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.setTextColor(valColor[0], valColor[1], valColor[2]);
+    doc.text(String(value), x + 5, y + 9.5);
+    doc.setFontSize(6.3);
+    doc.setTextColor(labColor[0], labColor[1], labColor[2]);
+    doc.text(label.toUpperCase(), x + 5, y + 15);
+  }
+  const y0 = 38, cardW = (W - 28 - 3 * 5) / 4, cardH = 19;
+  kpiCard(14, y0, cardW, cardH, toReply.length, 'Forages à replier', WARN_SOFT, WARN_BORDER, ERR, WARN_TXT);
+  kpiCard(14 + (cardW + 5), y0, cardW, cardH, totPlein + ' + ' + totCrep, 'PVC plein + crépiné à replier', WARN_SOFT, WARN_BORDER, ERR, WARN_TXT);
+  kpiCard(14 + 2 * (cardW + 5), y0, cardW, cardH, waiting.length, 'Forages en attente de foration', BLUE_SOFT, BLUE_BORDER, INK, BLUE_TXT);
+  kpiCard(14 + 3 * (cardW + 5), y0, cardW, cardH, waitPlein + ' + ' + waitCrep, 'PVC sur site en attente', BLUE_SOFT, BLUE_BORDER, INK, BLUE_TXT);
+  
+  // ─── Tableau principal (Reste en colonnes séparées, rouge gras) ───
   const body = rows.map(r => [
-    r.projet,
-    r.code,
-    r.localite,
-    r.pa + ' / ' + r.pu + ' / ' + r.pr,
-    r.ca + ' / ' + r.cu + ' / ' + r.cr,
+    r.projet, r.code, r.localite,
+    r.pa + ' / ' + r.pu, String(r.pr),
+    r.ca + ' / ' + r.cu, String(r.cr),
     String(r.g),
-    r.matStatus === 'replier' ? 'À REPLIER' : (r.matStatus === 'attente' ? 'En attente foration' : 'Replié' + (r.repliDate ? ' le ' + new Date(r.repliDate).toLocaleDateString('fr-FR') : '')),
+    r.matStatus === 'replier' ? 'À REPLIER' : (r.matStatus === 'attente' ? 'En attente' : 'Replié'),
     r.destination || '—'
   ]);
   
+  const repaintOnNewPage = function() {
+    if (doc.internal.getCurrentPageInfo().pageNumber > 1) paintBg();
+  };
+  
   doc.autoTable({
-    head: [['Projet', 'Forage', 'Localité', 'PVC plein A/U/R', 'PVC crépiné A/U/R', 'Gravier (m³)', 'Statut matériel', 'Destination']],
+    head: [['Projet', 'Forage', 'Localité', 'PVC plein\nAppro / Utilisé', 'Reste', 'PVC crépiné\nAppro / Utilisé', 'Reste', 'Gravier\n(m³)', 'Statut', 'Destination']],
     body: body,
-    startY: 28,
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [26, 26, 26], fontSize: 8 },
-    didParseCell: function(data) {
-      if (data.section === 'body' && rows[data.row.index]) {
-        const st = rows[data.row.index].matStatus;
-        if (st === 'replier') data.cell.styles.fillColor = [254, 243, 199];      // jaune : à replier
-        else if (st === 'attente') data.cell.styles.fillColor = [239, 246, 255]; // bleu clair : en attente
+    startY: y0 + cardH + 6,
+    styles: { fontSize: 7.5, cellPadding: 2, textColor: INK },
+    headStyles: { fillColor: INK, textColor: BG, fontSize: 7, halign: 'left' },
+    columnStyles: {
+      3: { halign: 'right' }, 4: { halign: 'right' },
+      5: { halign: 'right' }, 6: { halign: 'right' },
+      7: { halign: 'right' }
+    },
+    willDrawPage: repaintOnNewPage,
+    didParseCell: function(d) {
+      if (d.section !== 'body') return;
+      const r = rows[d.row.index];
+      if (!r) return;
+      if (r.matStatus === 'replier') d.cell.styles.fillColor = WARN_SOFT;
+      else if (r.matStatus === 'attente') d.cell.styles.fillColor = BLUE_SOFT;
+      else d.cell.styles.fillColor = [255, 255, 255];
+      // Colonnes "Reste" : gras, et ROUGE si à replier avec quantité > 0
+      if (d.column.index === 4 || d.column.index === 6) {
+        d.cell.styles.fontStyle = 'bold';
+        if (r.matStatus === 'replier' && Number(d.cell.raw) > 0) {
+          d.cell.styles.textColor = ERR;
+          d.cell.styles.fontSize = 8.5;
+        }
+      }
+      if (d.column.index === 8 && r.matStatus === 'replier') {
+        d.cell.styles.textColor = ERR;
+        d.cell.styles.fontStyle = 'bold';
       }
     }
   });
   
-  // Tableau des stocks par lieu
+  // ─── Stocks par lieu ───
   const stocks = computeStocks();
   const stockEntries = Object.entries(stocks)
     .filter(([k, v]) => Math.abs(v.pp) > 0.01 || Math.abs(v.pc) > 0.01 || Math.abs(v.g) > 0.01 || k === 'base')
@@ -3363,22 +3438,29 @@ async function generateMaterialPDF(share) {
     k === 'base' ? 'Base SIYO' : v.label,
     String(v.pp), String(v.pc), String(v.g)
   ]);
-  const yAfter = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 100;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(0);
+  let yAfter = (doc.lastAutoTable ? doc.lastAutoTable.finalY : 100) + 12;
+  if (yAfter > H - 40) { doc.addPage(); paintBg(); yAfter = 20; }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(INK[0], INK[1], INK[2]);
   doc.text('Stocks par lieu', 14, yAfter);
   doc.autoTable({
     head: [['Lieu', 'PVC plein', 'PVC crépiné', 'Gravier (m³)']],
     body: stockBody,
     startY: yAfter + 4,
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [26, 26, 26], fontSize: 8 }
+    styles: { fontSize: 8, cellPadding: 2, textColor: INK, fillColor: [255, 255, 255] },
+    headStyles: { fillColor: INK, textColor: BG, fontSize: 7.5 },
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    willDrawPage: repaintOnNewPage,
+    didParseCell: function(d) {
+      if (d.section === 'body' && d.column.index > 0 && Number(d.cell.raw) < 0) {
+        d.cell.styles.textColor = ERR;
+        d.cell.styles.fontStyle = 'bold';
+      }
+    }
   });
   
-  doc.setFontSize(8);
-  doc.setTextColor(130);
-  doc.text('Document généré automatiquement par SIYO Forages — A/U/R = Approvisionné / Utilisé / Reste à replier', 14, doc.internal.pageSize.getHeight() - 8);
+  doc.setFontSize(7);
+  doc.setTextColor(INK_FAINT[0], INK_FAINT[1], INK_FAINT[2]);
+  doc.text('Document généré automatiquement par SIYO Forages · Les quantités en rouge sont à replier en priorité', 14, H - 7);
   
   const filename = 'SIYO_materiel_' + today() + '.pdf';
   
@@ -3391,10 +3473,9 @@ async function generateMaterialPDF(share) {
         return;
       }
     } catch(e) {
-      if (e && e.name === 'AbortError') return; // l'utilisateur a annulé le partage
+      if (e && e.name === 'AbortError') return;
       console.error('Share failed:', e);
     }
-    // Fallback : téléchargement classique
     doc.save(filename);
     toast('Partage direct non disponible sur cet appareil — PDF téléchargé, envoie-le manuellement', 'default', 5000);
   } else {
